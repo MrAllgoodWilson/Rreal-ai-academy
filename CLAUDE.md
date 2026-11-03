@@ -93,7 +93,7 @@ docs/                       product docs, open questions, screenshots
    high-contrast variants in `globals.css`.
 
 ## Database (Supabase)
-- Production project: `rreal-ai-academy` (`vwajwkhlehgmpecrwnur`). Apply migrations in order (0001, 0002), then `supabase/seed.sql`.
+- Production project: `rreal-ai-academy` (`vwajwkhlehgmpecrwnur`). Apply migrations in order (0001, 0002, 0003), then `supabase/seed.sql`. All three are applied in production.
 - `tests/sql/v2-checks.sh` runs behavioural checks for 0002 against a local Postgres with Supabase-style stubs.
 - Every lesson is paid (membership); program lessons unlock in order across tracks, course lessons in order inside the course.
 - Paid AI features MUST call `takeQuota()` — at $1/month a single unmetered user can cost more than they pay.
