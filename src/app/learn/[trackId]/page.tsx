@@ -1,5 +1,7 @@
 "use client";
 
+import { use } from "react";
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { motion } from "framer-motion";
@@ -73,6 +75,7 @@ function TrackView({ trackId }: { trackId: string }) {
   );
 }
 
-export default function TrackPage({ params }: { params: { trackId: string } }) {
+export default function TrackPage({ params: paramsPromise }: { params: Promise<{ trackId: string }> }) {
+  const params = use(paramsPromise);
   return <RequireMember><TrackView trackId={params.trackId} /></RequireMember>;
 }

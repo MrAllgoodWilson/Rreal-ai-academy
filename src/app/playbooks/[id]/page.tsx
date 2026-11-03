@@ -1,12 +1,15 @@
 "use client";
 
+import { use } from "react";
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RequireMember } from "@/components/RequireAuth";
 import { PlaybookView } from "@/components/PlaybookView";
 import { getPlaybook } from "@/lib/curriculum";
 
-export default function PlaybookPage({ params }: { params: { id: string } }) {
+export default function PlaybookPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = use(paramsPromise);
   const pb = getPlaybook(params.id);
   if (!pb) notFound();
   return (

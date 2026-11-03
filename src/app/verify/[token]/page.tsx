@@ -16,8 +16,8 @@ async function revocationStatus(token: string) {
   return { revoked: !!data?.revoked_at, registered: !!data };
 }
 
-export default async function VerifyPage({ params }: { params: { token: string } }) {
-  const token = decodeURIComponent(params.token);
+export default async function VerifyPage({ params }: { params: Promise<{ token: string }> }) {
+  const token = decodeURIComponent((await params).token);
   let result: ReturnType<typeof verifyCertificate>;
   try {
     result = verifyCertificate(token);

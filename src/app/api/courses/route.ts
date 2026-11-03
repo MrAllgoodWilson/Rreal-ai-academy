@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 /** Published community courses + the signed-in learner's own AI-generated courses. */
 export async function GET() {
-  const sb = getSupabaseServer();
+  const sb = await getSupabaseServer();
   if (!sb) return NextResponse.json({ demo: true, courses: [] });
   const { data: auth } = await sb.auth.getUser();
   let q = sb.from("custom_courses").select("id, status, owner_id, content").order("created_at", { ascending: false }).limit(200);

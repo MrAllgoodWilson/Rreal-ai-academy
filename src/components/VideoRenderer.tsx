@@ -14,7 +14,7 @@ export function VideoRenderer({ defaultPrompt }: { defaultPrompt: string }) {
   const [status, setStatus] = useState<"idle" | "queued" | "processing" | "succeeded" | "failed">("idle");
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
-  const timer = useRef<ReturnType<typeof setInterval>>();
+  const timer = useRef<ReturnType<typeof setInterval>>(undefined);
 
   useEffect(() => () => clearInterval(timer.current), []);
 

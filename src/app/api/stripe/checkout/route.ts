@@ -9,7 +9,7 @@ import { getSupabaseServer } from "@/lib/supabase/server";
  * - Demo mode (no Supabase): 501 → the client activates a local demo membership.
  */
 export async function POST(req: Request) {
-  const sb = getSupabaseServer();
+  const sb = await getSupabaseServer();
   if (!sb) return NextResponse.json({ demo: true }, { status: 501 });
   const { data: auth } = await sb.auth.getUser();
   if (!auth.user) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });

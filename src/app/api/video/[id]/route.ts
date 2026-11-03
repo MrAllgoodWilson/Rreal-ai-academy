@@ -6,12 +6,12 @@ import { dispatchPluginEvent } from "@/lib/plugins/dispatch";
 export const dynamic = "force-dynamic";
 
 /** Polls a render; updates the stored status and returns the video URL when ready. */
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const who = await getMember();
   if ("error" in who) return who.error;
   if (who.demo) return NextResponse.json({ error: "Not available in demo mode" }, { status: 501 });
   const { sb, user } = who.member;
-  const { data: row } = await sb.from("video_renders").select("*").eq("id", params.id).maybeSingle();
+  const { data: row } = await sb.from("video_renders").select("*").eq("id", (await params).id).maybeSingle();
   if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (row.status === "succeeded" || row.status === "failed") return NextResponse.json(row);
 

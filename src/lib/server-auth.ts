@@ -26,7 +26,7 @@ export type Member = { sb: SupabaseClient; user: User; subscribed: boolean };
  * Returns a NextResponse to send back when the caller isn't allowed.
  */
 export async function getMember(opts: { requireSubscription?: boolean } = {}): Promise<{ demo: true } | { demo: false; member: Member } | { error: NextResponse }> {
-  const sb = getSupabaseServer();
+  const sb = await getSupabaseServer();
   if (!sb) return { demo: true };
   const { data } = await sb.auth.getUser();
   if (!data.user) return { error: NextResponse.json({ error: "Please sign in." }, { status: 401 }) };

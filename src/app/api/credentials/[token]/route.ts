@@ -5,8 +5,8 @@ import { credentialCode, credentialTitle, verifyCertificate } from "@/lib/certif
  * Open Badges 3.0 / W3C Verifiable Credential (JSON-LD) view of a Rreal credential,
  * so learners can import it into digital-badge wallets and employers' systems can read it.
  */
-export async function GET(req: Request, { params }: { params: { token: string } }) {
-  const token = decodeURIComponent(params.token);
+export async function GET(req: Request, { params }: { params: Promise<{ token: string }> }) {
+  const token = decodeURIComponent((await params).token);
   let v: ReturnType<typeof verifyCertificate>;
   try {
     v = verifyCertificate(token);

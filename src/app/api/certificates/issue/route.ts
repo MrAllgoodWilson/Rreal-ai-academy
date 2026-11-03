@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   let { name, completedLessonIds, score } = parsed.data;
   const { trackId } = parsed.data;
 
-  const sb = getSupabaseServer();
+  const sb = await getSupabaseServer();
   let userId: string | undefined;
   let required: { id: string; minutes: number; title: string }[];
   let title: string;

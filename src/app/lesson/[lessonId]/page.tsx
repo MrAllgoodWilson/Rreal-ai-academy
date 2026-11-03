@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { notFound, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Lock, Mic, X } from "lucide-react";
@@ -160,7 +160,8 @@ function LessonPlayer({ lessonId }: { lessonId: string }) {
   );
 }
 
-export default function LessonPage({ params }: { params: { lessonId: string } }) {
+export default function LessonPage({ params: paramsPromise }: { params: Promise<{ lessonId: string }> }) {
+  const params = use(paramsPromise);
   return (
     <RequireMember>
       <Player key={params.lessonId} lessonId={params.lessonId} />

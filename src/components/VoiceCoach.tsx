@@ -104,7 +104,7 @@ export function VoiceCoach({ lessonId }: { lessonId?: string }) {
   const [caption, setCaption] = useState("");
   const [supported, setSupported] = useState(true);
   const [engine, setEngine] = useState<"live" | "offline" | null>(null);
-  const pendingQuiz = useRef<string | undefined>();
+  const pendingQuiz = useRef<string | undefined>(undefined);
   const recog = useRef<SpeechRecognitionLike | null>(null);
   const audioEl = useRef<HTMLAudioElement | null>(null);
   const logRef = useRef<HTMLDivElement>(null);

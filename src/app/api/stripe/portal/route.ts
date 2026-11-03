@@ -5,7 +5,7 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 /** Opens the Stripe Customer Portal (update card, cancel, switch plan, invoices). */
 export async function POST(req: Request) {
   const stripe = getStripe();
-  const sb = getSupabaseServer();
+  const sb = await getSupabaseServer();
   if (!sb) return NextResponse.json({ demo: true }, { status: 501 });
   // Without an API key, use Stripe's no-code customer portal login link.
   if (!stripe) {

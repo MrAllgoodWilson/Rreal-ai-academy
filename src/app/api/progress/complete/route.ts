@@ -6,7 +6,7 @@ import { dispatchPluginEvent } from "@/lib/plugins/dispatch";
 
 /** Authoritative lesson completion. XP, streak and gating are computed in Postgres (complete_lesson RPC). */
 export async function POST(req: Request) {
-  const sb = getSupabaseServer();
+  const sb = await getSupabaseServer();
   if (!sb) return NextResponse.json({ error: "Not configured" }, { status: 501 });
   const parsed = z.object({ lessonId: z.string(), score: z.number().int().min(0).max(100) }).safeParse(await req.json().catch(() => null));
   if (!parsed.success || !/^[a-z0-9-]{2,100}$/.test(parsed.data.lessonId)) return NextResponse.json({ error: "Invalid lesson" }, { status: 400 });

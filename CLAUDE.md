@@ -20,7 +20,9 @@ Accessibility (blind, deaf, motor, cognitive) is a core requirement, not an add-
 | Unit tests | `npm test` (Vitest, `tests/*.test.ts`) |
 | Production build | `npm run build && npm start` |
 | E2E + a11y smoke test | `npm run build && npm start` then `BASE=http://localhost:3000 node tests/e2e/smoke.mjs` (needs Playwright + Chromium; writes `docs/screenshots/`) |
-| Regenerate DB seed from curriculum | `node --experimental-strip-types scripts/generate-seed.mts` |
+| Regenerate DB seed from curriculum | `npm run db:seed` |
+| Cloudflare Worker build / local preview | `npm run cf:build` / `npm run cf:preview` (workerd on :8787; secrets in `.dev.vars`) |
+| Deploy to Cloudflare | `npm run deploy` (or Workers Builds from GitHub — see docs/LAUNCH.md) |
 
 **Always run `npm run typecheck && npm run lint && npm test` before committing.** Run the E2E smoke test for any UI-flow change.
 The E2E test needs `CERT_SIGNING_SECRET` set (put it in `.env.local`) because production mode refuses to sign certificates without it.
@@ -36,7 +38,7 @@ The E2E test needs `CERT_SIGNING_SECRET` set (put it in `.env.local`) because pr
 ## Architecture map
 ```
 src/
-  app/                      Next.js 14 App Router pages + API routes
+  app/                      Next.js 15 App Router pages + API routes (params are Promises)
     (auth)/                 login, signup, forgot-password, forgot-username, reset-password
     dashboard, learn, lesson/[lessonId], coach, sandbox, studio, review,
     leaderboard, achievements, certificates, portfolio, settings, pricing, onboarding
@@ -101,7 +103,10 @@ docs/                       product docs, open questions, screenshots
   and plug in Resend as custom SMTP so reset emails come from your domain.
 
 ## Launch
-See `docs/LAUNCH.md` (Vercel import, env vars, Stripe webhook, Supabase auth settings).
+Hosting is **Cloudflare Workers** via OpenNext (`wrangler.jsonc`, `open-next.config.ts`). Code must stay Workers-compatible:
+use `fetch`, Web Crypto or `node:crypto` (nodejs_compat), Stripe with `createFetchHttpClient` + `constructEventAsync`; no filesystem writes.
+`NEXT_PUBLIC_*` vars are inlined at build time, so they must be set as Workers Builds *build* variables too.
+See `docs/LAUNCH.md` for the full go-live steps.
 
 ## Open items
 See `docs/QUESTIONS_FOR_GOOGLE_AGENT.md` for decisions that need the owner's input, and `docs/PRODUCT_BLUEPRINT.md` for the roadmap.

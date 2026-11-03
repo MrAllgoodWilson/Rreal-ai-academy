@@ -42,12 +42,12 @@ Everything is saved in your browser. Add keys one at a time to switch on real se
 1. **Supabase**: create a project. Run `supabase/migrations/0001_init.sql`, then `supabase/seed.sql`, in the SQL editor (or `supabase db push`).
    In Auth → URL configuration, set the Site URL and add `https://YOUR_DOMAIN/reset-password` and `/onboarding` as redirect URLs.
    In Auth → SMTP, plug in Resend so emails come from your domain.
-2. **Environment**: copy `.env.example` → `.env.local` (or set the same variables in Vercel). At minimum set the Supabase keys, `CERT_SIGNING_SECRET` (`openssl rand -base64 48`) and `NEXT_PUBLIC_SITE_URL`.
+2. **Environment**: copy `.env.example` → `.env.local` (on Cloudflare: Worker → Settings → Variables and Secrets). At minimum set the Supabase keys, `CERT_SIGNING_SECRET` (`openssl rand -base64 48`) and `NEXT_PUBLIC_SITE_URL`.
 3. **Stripe**: create a “Pro” product with monthly and annual prices, then put the price IDs in `STRIPE_PRICE_MONTHLY` / `STRIPE_PRICE_ANNUAL`.
    Add a webhook to `https://YOUR_DOMAIN/api/webhooks/stripe` for `checkout.session.completed` and `customer.subscription.*`.
    Enable the Customer Portal.
 4. **AI**: set `ANTHROPIC_API_KEY` (live Coach and Sandbox). Optionally set `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` for a premium coach voice.
-5. **Deploy**: push to GitHub and import into Vercel (zero config). Check `https://YOUR_DOMAIN/api/health` to see which integrations are live.
+5. **Deploy**: Cloudflare Workers via OpenNext — `npm run deploy`, or connect the GitHub repo with Workers Builds (build `npx opennextjs-cloudflare build`, deploy `npx opennextjs-cloudflare deploy`). See `docs/LAUNCH.md`. Check `https://YOUR_DOMAIN/api/health` to see which integrations are live.
 
 ## Quality checks
 ```bash
