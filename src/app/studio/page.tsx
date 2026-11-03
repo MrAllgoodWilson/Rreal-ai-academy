@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CalendarPlus, Check, Pause, Play, RefreshCw, Save, Trash2 } from "lucide-react";
-import { RequireAuth } from "@/components/RequireAuth";
+import { RequireMember } from "@/components/RequireAuth";
+import { VideoRenderer } from "@/components/VideoRenderer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { generateHooks, generateScript, toICS, totalSeconds, type Platform, type Scene } from "@/lib/studio";
 import { useAcademy } from "@/lib/store";
@@ -212,6 +213,9 @@ function Studio() {
                 <label className="flex items-center gap-3"><input type="checkbox" checked={disclose} onChange={(e) => setDisclose(e.target.checked)} className="h-5 w-5 accent-[rgb(var(--neon))]" /> Show “AI-generated” label</label>
                 <button type="button" className="btn-primary" onClick={() => go(4)}>Schedule posts →</button>
               </div>
+              <div className="md:col-span-2">
+                <VideoRenderer defaultPrompt={`${scenes[1]?.visual ?? scenes[0]?.visual ?? ""}. Topic: ${niche}. Vertical 9:16, cinematic lighting, smooth camera motion, no text.`} />
+              </div>
             </div>
           )}
 
@@ -254,5 +258,5 @@ function Studio() {
 }
 
 export default function StudioPage() {
-  return <RequireAuth><Studio /></RequireAuth>;
+  return <RequireMember><Studio /></RequireMember>;
 }

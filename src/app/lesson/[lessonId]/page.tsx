@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { notFound, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Lock, Mic, X } from "lucide-react";
-import { RequireAuth } from "@/components/RequireAuth";
+import { RequireMember } from "@/components/RequireAuth";
+import { useI18n, useTranslated } from "@/lib/i18n";
 import { ProgressBar } from "@/components/ui/ProgressRing";
 import { LabBlock, QuizBlock, StaticBlock } from "@/components/LessonBlocks";
 import { ALL_LESSONS, getLessonRef, lockReason } from "@/lib/curriculum";
@@ -16,8 +17,19 @@ const EXAM_ID = "capstone-exam";
 const EXAM_PASS = 80;
 
 function Player({ lessonId }: { lessonId: string }) {
+  const { catalogVersion } = useAcademy();
   const ref = getLessonRef(lessonId);
+  if (!ref && lessonId.startsWith("u-") && catalogVersion === 0)
+    return <div className="grid min-h-[50vh] place-items-center" role="status"><span className="sr-only">Loading lesson…</span><div className="h-10 w-10 animate-spin rounded-full border-4 border-line border-t-neon" aria-hidden="true" /></div>;
+  if (!ref) notFound();
+  return <LessonPlayer key={lessonId} lessonId={lessonId} />;
+}
+
+function LessonPlayer({ lessonId }: { lessonId: string }) {
+  const ref = getLessonRef(lessonId)!;
   const { progress, subscribed, completeLesson } = useAcademy();
+  const { t } = useI18n();
+  const { value: tl, translating } = useTranslated(`lesson:${lessonId}`, { title: ref.lesson.title, blocks: ref.lesson.blocks });
   const { prefs, announce } = useA11y();
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -25,8 +37,8 @@ function Player({ lessonId }: { lessonId: string }) {
   const [firstTry, setFirstTry] = useState<Record<number, boolean>>({});
   const [finished, setFinished] = useState<null | { score: number; passed: boolean }>(null);
 
-  if (!ref) notFound();
-  const { lesson, track, week, module } = ref;
+  const { track, week, module } = ref;
+  const lesson = { ...ref.lesson, title: tl.title, blocks: tl.blocks };
   const exam = lesson.id === EXAM_ID;
   const blocks = lesson.blocks;
   const block = blocks[step];
@@ -54,9 +66,9 @@ function Player({ lessonId }: { lessonId: string }) {
     return (
       <div className="mx-auto grid max-w-lg place-items-center px-4 py-24 text-center">
         <Lock className="h-14 w-14 text-violet" aria-hidden="true" />
-        <h1 className="mt-4 font-display text-3xl font-bold">{reason === "subscription" ? `Week ${week.number} is a Pro lesson` : "Finish the previous lesson first"}</h1>
-        <p className="mt-2 text-muted">{reason === "subscription" ? "Start your 7-day free trial to unlock every week, the full Studio and certificates." : "Lessons build on each other. Complete the one before this to unlock it."}</p>
-        <Link href={reason === "subscription" ? "/pricing" : `/learn/${track.id}`} className="btn-primary mt-6">{reason === "subscription" ? "Start free trial" : "Back to track"}</Link>
+        <h1 className="mt-4 font-display text-3xl font-bold">{reason === "subscription" ? t("lesson.paywall") : t("lesson.locked")}</h1>
+        <p className="mt-2 text-muted">{reason === "subscription" ? "Every course, tool and certificate for $1/month." : "Lessons build on each other. Complete the one before this to unlock it."}</p>
+        <Link href={reason === "subscription" ? "/subscribe" : `/learn/${track.id}`} className="btn-primary mt-6">{reason === "subscription" ? t("pay.cta") : "Back to course"}</Link>
       </div>
     );
   }
@@ -109,7 +121,8 @@ function Player({ lessonId }: { lessonId: string }) {
         <span className="shrink-0 text-sm text-muted" aria-hidden="true">{step + 1}/{blocks.length}</span>
       </div>
 
-      <p className="text-sm text-muted">{track.emoji} {track.name} · Week {week.number} · {module.title}</p>
+      <p className="text-sm text-muted">{track.emoji} {track.name}{track.kind === "program" ? ` · Week ${week.number} · ${module.title}` : ""}</p>
+      {translating && <p className="text-sm text-violet" role="status">{t("lesson.translating")}</p>}
       <h1 className="mb-6 font-display text-3xl font-bold">{lesson.title}</h1>
 
       <AnimatePresence mode="wait">
@@ -133,13 +146,13 @@ function Player({ lessonId }: { lessonId: string }) {
 
       <div className="mt-6 flex items-center justify-between gap-3">
         <button type="button" className="btn-ghost" onClick={() => setStep((s) => s - 1)} disabled={step === 0}>
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" /> {t("lesson.back")}
         </button>
         <Link href={`/coach?lesson=${lesson.id}`} className="btn-ghost hidden sm:inline-flex">
-          <Mic className="h-4 w-4" aria-hidden="true" /> Ask Coach
+          <Mic className="h-4 w-4" aria-hidden="true" /> {t("lesson.askCoach")}
         </Link>
         <button type="button" className="btn-primary" onClick={advance} disabled={gated}>
-          {step === blocks.length - 1 ? (exam ? "Submit exam" : "Finish lesson") : "Continue"} <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          {step === blocks.length - 1 ? (exam ? "Submit exam" : t("lesson.finish")) : t("lesson.continue")} <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
       {gated && <p className="mt-3 text-right text-sm text-muted">{block.type === "quiz" ? "Answer correctly to continue." : "Reach the pass mark to continue."}</p>}
@@ -149,8 +162,8 @@ function Player({ lessonId }: { lessonId: string }) {
 
 export default function LessonPage({ params }: { params: { lessonId: string } }) {
   return (
-    <RequireAuth>
+    <RequireMember>
       <Player key={params.lessonId} lessonId={params.lessonId} />
-    </RequireAuth>
+    </RequireMember>
   );
 }

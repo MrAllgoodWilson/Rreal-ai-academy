@@ -1,65 +1,73 @@
-import { TRACKS } from "./tracks";
-import type { Block, Lesson, Module, Track, Week } from "./types";
+import { TRACKS as PROGRAM } from "./tracks";
+import { COURSES } from "./courses";
+import { PLAYBOOKS, getPlaybook } from "./playbooks";
+import type { Block, Lesson, Module, Playbook, Track, Week } from "./types";
 
-export { TRACKS };
-export type { Block, Lesson, Module, Track, Week };
+export type { Block, Lesson, Module, Playbook, Track, Week };
+export { PLAYBOOKS, getPlaybook, COURSES };
+
+/** The 8-week Rreal AI Mastery Program (sequential across its 5 tracks). */
+export const TRACKS: Track[] = PROGRAM.map((t) => ({ ...t, kind: "program" as const }));
 
 export interface LessonRef {
   lesson: Lesson;
   module: Module;
   week: Week;
   track: Track;
-  /** Position in the global learning path (0-based) */
+  /** Position in the global lesson list (0-based) */
   index: number;
 }
 
-/** Week 1 is the free preview. Everything else needs an active subscription/trial. */
-export const FREE_WEEKS = new Set([1]);
+/** Every track/course the app knows about. Custom (AI-generated) courses are added at runtime via registerTracks. */
+export const ALL_TRACKS: Track[] = [...TRACKS, ...COURSES];
+export const ALL_LESSONS: LessonRef[] = [];
+const byId = new Map<string, LessonRef>();
 
-export const ALL_LESSONS: LessonRef[] = (() => {
-  const out: LessonRef[] = [];
-  for (const track of TRACKS)
-    for (const week of track.weeks)
-      for (const mod of week.modules)
-        for (const lesson of mod.lessons) out.push({ lesson, module: mod, week, track, index: out.length });
-  return out;
-})();
+function index(track: Track) {
+  for (const week of track.weeks)
+    for (const mod of week.modules)
+      for (const lesson of mod.lessons) {
+        if (byId.has(lesson.id)) continue;
+        const ref: LessonRef = { lesson, module: mod, week, track, index: ALL_LESSONS.length };
+        ALL_LESSONS.push(ref);
+        byId.set(lesson.id, ref);
+      }
+}
+ALL_TRACKS.forEach(index);
 
-const byId = new Map(ALL_LESSONS.map((r) => [r.lesson.id, r]));
+/** Adds AI-generated/custom courses (from the database) to the runtime catalog. Idempotent. */
+export function registerTracks(tracks: Track[]) {
+  for (const t of tracks) {
+    if (ALL_TRACKS.some((x) => x.id === t.id)) continue;
+    ALL_TRACKS.push({ ...t, kind: t.kind ?? "custom" });
+    index(ALL_TRACKS[ALL_TRACKS.length - 1]);
+  }
+}
 
 export const getLessonRef = (id: string) => byId.get(id);
-export const getTrack = (id: string) => TRACKS.find((t) => t.id === id);
+export const getTrack = (id: string) => ALL_TRACKS.find((t) => t.id === id);
 export const lessonsForTrack = (trackId: string) => ALL_LESSONS.filter((r) => r.track.id === trackId);
+export const programLessons = () => ALL_LESSONS.filter((r) => r.track.kind === "program");
 export const TOTAL_WEEKS = Math.max(...TRACKS.flatMap((t) => t.weeks.map((w) => w.number)));
-
-export function isFreeLesson(id: string) {
-  const ref = byId.get(id);
-  return !!ref && FREE_WEEKS.has(ref.week.number);
-}
 
 export type LockReason = "subscription" | "prerequisite" | null;
 
 /**
- * Gating logic:
- *  1. Paid content needs an active subscription or trial.
- *  2. Lessons unlock in order. A placement result lets learners start
- *     at a higher track (the first lesson of any track <= placementLevel is open).
+ * Gating logic (all content is paid — membership is $1/month):
+ *  1. Every lesson needs an active subscription.
+ *  2. Mastery Program: lessons unlock in order across tracks; placement lets learners start at a higher track.
+ *  3. Standalone & custom courses: lessons unlock in order inside the course; the first lesson is always open.
  */
-export function lockReason(
-  id: string,
-  completed: Record<string, unknown>,
-  opts: { subscribed: boolean; placementLevel?: number },
-): LockReason {
+export function lockReason(id: string, completed: Record<string, unknown>, opts: { subscribed: boolean; placementLevel?: number }): LockReason {
   const ref = byId.get(id);
   if (!ref) return "prerequisite";
-  if (!FREE_WEEKS.has(ref.week.number) && !opts.subscribed) return "subscription";
-  if (ref.index === 0) return null;
-  const prev = ALL_LESSONS[ref.index - 1];
+  if (!opts.subscribed) return "subscription";
+  const siblings = ref.track.kind === "program" ? programLessons() : lessonsForTrack(ref.track.id);
+  const pos = siblings.findIndex((r) => r.lesson.id === id);
+  if (pos <= 0) return null;
+  const prev = siblings[pos - 1];
   if (completed[prev.lesson.id]) return null;
-  const firstInTrack = lessonsForTrack(ref.track.id)[0];
-  if (firstInTrack.lesson.id === id && (opts.placementLevel ?? 1) >= ref.track.level) return null;
-  // Placement can also open later lessons in a skipped-into track once its previous lesson is done
-  if (prev.track.id !== ref.track.id && (opts.placementLevel ?? 1) >= ref.track.level) return null;
+  if (ref.track.kind === "program" && prev.track.id !== ref.track.id && (opts.placementLevel ?? 1) >= ref.track.level) return null;
   return "prerequisite";
 }
 
@@ -69,11 +77,23 @@ export function trackProgress(trackId: string, completed: Record<string, unknown
   return { done, total: lessons.length, pct: lessons.length ? Math.round((done / lessons.length) * 100) : 0 };
 }
 
-export function nextLesson(completed: Record<string, unknown>) {
-  return ALL_LESSONS.find((r) => !completed[r.lesson.id]);
+/** Next lesson in the Mastery Program, or in a specific course when trackId is given. */
+export function nextLesson(completed: Record<string, unknown>, trackId?: string) {
+  const list = trackId ? lessonsForTrack(trackId) : programLessons();
+  return list.find((r) => !completed[r.lesson.id]);
+}
+
+/** Courses the learner has started but not finished (most recent first by catalog order). */
+export function inProgressTracks(completed: Record<string, unknown>) {
+  return ALL_TRACKS.filter((t) => {
+    const p = trackProgress(t.id, completed);
+    return p.done > 0 && p.done < p.total;
+  });
 }
 
 export function quizBlocks(lessonId: string) {
   const ref = byId.get(lessonId);
   return (ref?.lesson.blocks.filter((b) => b.type === "quiz") ?? []) as Extract<Block, { type: "quiz" }>[];
 }
+
+export const LEVEL_NAMES = ["", "Dummy", "Beginner", "Intermediate", "Advanced", "Expert"] as const;

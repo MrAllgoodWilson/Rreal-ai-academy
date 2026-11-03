@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { ALL_LESSONS, TRACKS, getLessonRef, lessonsForTrack } from "@/lib/curriculum";
+import { ALL_LESSONS, ALL_TRACKS, getLessonRef, lessonsForTrack, registerTracks, type Track } from "@/lib/curriculum";
 import { applyActivity, dayKey, levelForXp, streakMultiplier, type StreakState } from "@/lib/gamification";
 import { BADGES, newlyEarned, type BadgeStats } from "@/lib/badges";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
@@ -164,6 +164,10 @@ interface Ctx {
   setOnboarding: (o: Partial<Onboarding>) => void;
   setDailyGoal: (xp: number) => void;
   startTrial: (plan: Subscription["plan"]) => void;
+  /** Bumps whenever custom/community courses are added to the catalog */
+  catalogVersion: number;
+  customCourses: (Track & { status?: string; mine?: boolean })[];
+  addCustomCourse: (t: Track) => void;
   cancelSubscription: () => void;
   resetProgress: () => void;
 }
@@ -176,6 +180,8 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
   const [progress, setProgress] = useState<Progress>(freshProgress);
   const [subscription, setSubscription] = useState<Subscription>({ status: "none" });
   const [celebrations, setCelebrations] = useState<Celebration[]>([]);
+  const [catalogVersion, setCatalogVersion] = useState(0);
+  const [customCourses, setCustomCourses] = useState<(Track & { status?: string; mine?: boolean })[]>([]);
   const progressRef = useRef(progress);
   progressRef.current = progress;
 
@@ -228,6 +234,24 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  /* Load AI-generated + community courses into the catalog */
+  useEffect(() => {
+    if (!ready) return;
+    const apply = (list: (Track & { status?: string; mine?: boolean })[]) => {
+      registerTracks(list);
+      setCustomCourses(list);
+      setCatalogVersion((v) => v + 1);
+    };
+    if (isDemoMode) {
+      if (user) apply(read<Track[]>(`rreal.v1.custom.${user.id}`, []).map((t) => ({ ...t, mine: true, status: "private" })));
+      return;
+    }
+    fetch("/api/courses", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => apply(j.courses ?? []))
+      .catch(() => {});
+  }, [ready, user]);
+
   /* Persist */
   useEffect(() => {
     if (!ready || !user) return;
@@ -252,7 +276,7 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
   /** Recompute badges after any progress mutation */
   const withBadges = useCallback(
     (p: Progress): Progress => {
-      const tracksCompleted = TRACKS.filter((t) => lessonsForTrack(t.id).every((r) => p.completed[r.lesson.id])).map((t) => t.id);
+      const tracksCompleted = ALL_TRACKS.filter((t) => lessonsForTrack(t.id).every((r) => p.completed[r.lesson.id])).map((t) => t.id);
       const stats: BadgeStats = {
         lessonsCompleted: Object.keys(p.completed).length,
         xp: p.xp,
@@ -470,6 +494,14 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
       setSubscription({ status: "trialing", plan, trialEndsAt: ends });
     },
     cancelSubscription: () => setSubscription({ status: "canceled" }),
+    catalogVersion,
+    customCourses,
+    addCustomCourse: (t) => {
+      registerTracks([t]);
+      setCustomCourses((c) => [{ ...t, mine: true, status: "private" }, ...c.filter((x) => x.id !== t.id)]);
+      setCatalogVersion((v) => v + 1);
+      if (isDemoMode && user) write(`rreal.v1.custom.${user.id}`, [t, ...read<Track[]>(`rreal.v1.custom.${user.id}`, []).filter((x) => x.id !== t.id)]);
+    },
     resetProgress: () => setProgress(freshProgress()),
   };
 

@@ -9,7 +9,8 @@ export function getStripe() {
   return client;
 }
 
-export const PRICE_IDS = {
-  monthly: process.env.STRIPE_PRICE_MONTHLY,
-  annual: process.env.STRIPE_PRICE_ANNUAL,
-} as const;
+/** $1/month membership price (live). Override with STRIPE_PRICE_MONTHLY. */
+export const MONTHLY_PRICE_ID = process.env.STRIPE_PRICE_MONTHLY || "price_1UXevHK68Pw0CGHvMMNt6NeD";
+
+/** Webhook signature verification only needs the webhook secret; the API key may be absent. */
+export const webhookVerifier = () => getStripe() ?? new Stripe("sk_unused_for_webhook_verification");

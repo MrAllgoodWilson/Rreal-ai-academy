@@ -7,6 +7,8 @@ import { useA11y } from "@/lib/a11y";
 import { useAcademy } from "@/lib/store";
 import { getLessonRef } from "@/lib/curriculum";
 import type { CoachMode } from "@/lib/coach-offline";
+import { SPEECH_LANG, useI18n } from "@/lib/i18n";
+import { VoicePicker } from "@/components/VoicePicker";
 
 /* Minimal typings for the Web Speech API (not in TS DOM lib everywhere) */
 type SpeechRecognitionLike = {
@@ -84,7 +86,9 @@ function Waveform({ stream, speaking }: { stream: MediaStream | null; speaking: 
 
 export function VoiceCoach({ lessonId }: { lessonId?: string }) {
   const { prefs, announce } = useA11y();
+  const { lang } = useI18n();
   const { bump, progress } = useAcademy();
+  const [showVoices, setShowVoices] = useState(false);
   const lesson = lessonId ? getLessonRef(lessonId) : undefined;
   const [mode, setMode] = useState<CoachMode>("chat");
   const [messages, setMessages] = useState<Msg[]>([
@@ -129,8 +133,8 @@ export function VoiceCoach({ lessonId }: { lessonId?: string }) {
       setSpeaking(true);
       // Premium voice via ElevenLabs if configured, otherwise browser TTS
       try {
-        const res = await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) });
-        if (res.ok && res.headers.get("content-type")?.includes("audio")) {
+        const res = prefs.voiceProvider === "premium" ? await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voiceId: prefs.premiumVoiceId, lang }) }) : null;
+        if (res?.ok && res.headers.get("content-type")?.includes("audio")) {
           const url = URL.createObjectURL(await res.blob());
           const a = new Audio(url);
           audioEl.current = a;
@@ -150,14 +154,17 @@ export function VoiceCoach({ lessonId }: { lessonId?: string }) {
       if (!("speechSynthesis" in window)) { setSpeaking(false); return; }
       const u = new SpeechSynthesisUtterance(text.replace(/[•✅]/g, ""));
       u.rate = prefs.voiceRate;
-      const v = window.speechSynthesis.getVoices().find((x) => /^en/i.test(x.lang) && /(natural|neural|samantha|google us|aria|jenny)/i.test(x.name));
+      u.pitch = prefs.voicePitch;
+      u.lang = SPEECH_LANG[lang];
+      const all = window.speechSynthesis.getVoices().filter((x) => x.lang.toLowerCase().startsWith(lang));
+      const v = all.find((x) => x.name === prefs.deviceVoiceName) ?? all.find((x) => /(natural|neural|samantha|google|aria|jenny|paulina|monica)/i.test(x.name)) ?? all[0];
       if (v) u.voice = v;
       u.onboundary = (e) => setCaption(text.slice(Math.max(0, text.lastIndexOf(" ", e.charIndex - 60)), e.charIndex + 40));
       u.onend = () => { setSpeaking(false); setCaption(""); };
       u.onerror = () => { setSpeaking(false); setCaption(""); };
       window.speechSynthesis.speak(u);
     },
-    [voiceOn, prefs.voiceRate, stopVoice],
+    [voiceOn, prefs.voiceRate, prefs.voicePitch, prefs.voiceProvider, prefs.premiumVoiceId, prefs.deviceVoiceName, lang, stopVoice],
   );
 
   const send = useCallback(
@@ -173,7 +180,7 @@ export function VoiceCoach({ lessonId }: { lessonId?: string }) {
         const res = await fetch("/api/coach", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ messages: next.slice(-12), mode: modeOverride ?? mode, lessonId, pendingQuizId: pendingQuiz.current, learner: { level: progress.onboarding.placementLevel, goal: progress.onboarding.goal } }),
+          body: JSON.stringify({ messages: next.slice(-12), mode: modeOverride ?? mode, lessonId, lang, pendingQuizId: pendingQuiz.current, learner: { level: progress.onboarding.placementLevel, goal: progress.onboarding.goal } }),
         });
         const json = await res.json();
         const reply: string = json.reply ?? "Sorry, I couldn't respond just now.";
@@ -188,7 +195,7 @@ export function VoiceCoach({ lessonId }: { lessonId?: string }) {
         setBusy(false);
       }
     },
-    [busy, messages, mode, lessonId, progress.onboarding, announce, say, stopVoice],
+    [busy, messages, mode, lessonId, lang, progress.onboarding, announce, say, stopVoice],
   );
 
   const startListening = async () => {
@@ -203,7 +210,7 @@ export function VoiceCoach({ lessonId }: { lessonId?: string }) {
       return;
     }
     const r = new SR();
-    r.lang = "en-US";
+    r.lang = SPEECH_LANG[lang];
     r.interimResults = true;
     r.continuous = false;
     let finalText = "";
@@ -345,6 +352,13 @@ export function VoiceCoach({ lessonId }: { lessonId?: string }) {
               </button>
             ))}
           </div>
+        </div>
+        <div className="card">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-lg font-semibold">Coach voice</h2>
+            <button type="button" className="text-sm text-neon underline" aria-expanded={showVoices} aria-controls="coach-voices" onClick={() => setShowVoices((v) => !v)}>{showVoices ? "Hide" : "Choose voice"}</button>
+          </div>
+          {showVoices && <div id="coach-voices" className="mt-4"><VoicePicker /></div>}
         </div>
         <div className="card text-sm text-muted">
           <h2 className="mb-2 font-display text-lg font-semibold text-ink">Tips</h2>

@@ -1,0 +1,221 @@
+import type { Playbook, PlaybookTool } from "./types";
+
+/**
+ * Playbooks: step-by-step recipes to create a specific thing, with the exact tools/subscriptions needed.
+ * Pricing is described as free / freemium / paid (exact prices change often — learners are told to check).
+ * Learners can also ask the AI to generate a custom playbook for anything not listed (/api/playbooks/generate).
+ */
+
+const tool = (name: string, use: string, url: string, pricing: PlaybookTool["pricing"], required = true): PlaybookTool => ({ name, use, url, pricing, required });
+
+const CLAUDE = tool("Claude or ChatGPT", "Ideas, scripts, prompts and copy", "https://claude.ai", "freemium");
+const ELEVEN = tool("ElevenLabs", "Realistic AI voiceover", "https://elevenlabs.io", "freemium");
+const CAPCUT = tool("CapCut", "Editing, auto-captions, music, export 9:16", "https://www.capcut.com", "freemium");
+const CANVA = tool("Canva", "Templates, design, brand kit, covers", "https://www.canva.com", "freemium");
+const VIDEOGEN = tool("AI video generator (Runway, Kling, Luma, Veo or Higgsfield)", "Generate B-roll / scenes from text or images", "https://runwayml.com", "paid");
+
+export const PLAYBOOKS: Playbook[] = [
+  {
+    id: "pb-faceless-short",
+    title: "Faceless TikTok / Reel / Short (narrated)",
+    category: "video",
+    level: 2,
+    minutes: 45,
+    emoji: "🎬",
+    outcome: "A 30-second captioned vertical video with AI voice and AI visuals, ready to post.",
+    tools: [CLAUDE, ELEVEN, VIDEOGEN, CAPCUT, tool("Pexels", "Free stock B-roll if you don't generate", "https://www.pexels.com", "free", false)],
+    steps: [
+      { title: "Write the script", body: "Ask AI for a 30-second script: hook (≤2s), 3 value beats, call to action. Read it aloud and trim to ~75 words.", prompt: "You are a short-form video strategist. Write a 30-second voiceover script (max 75 words) about [TOPIC] for [AUDIENCE]. Structure: hook under 10 words, 3 quick value beats, CTA. Also give 4 matching visual scene descriptions, one per beat, vertical 9:16." },
+      { title: "Generate the voiceover", body: "Paste the script into ElevenLabs → Text to Speech. Pick a voice that fits (energetic for hooks, calm for tutorials). Download MP3." },
+      { title: "Create the visuals", body: "Use each scene description as a prompt in your AI video tool (or Rreal Studio → Render). Generate 4–6 clips of 4–5 seconds, 9:16, same style words in every prompt for consistency." },
+      { title: "Edit and caption", body: "In CapCut: drop the voiceover, line up clips to each beat, add Auto Captions (proofread them!), keep text in the center safe zone, add subtle music at 10–15% volume." },
+      { title: "Cover & caption", body: "Make a cover in Canva with 3–5 big words. Ask AI for a post caption + 5 hashtags." },
+      { title: "Post or schedule", body: "Export 1080×1920. Post natively or schedule from Rreal Connections. Turn on the platform's AI-generated label if visuals look realistic." },
+    ],
+  },
+  {
+    id: "pb-avatar-video",
+    title: "AI Avatar Talking-Head Video",
+    category: "video",
+    level: 3,
+    minutes: 40,
+    emoji: "🧑‍💼",
+    outcome: "A presenter-style video using a digital avatar (yours or a stock one).",
+    tools: [CLAUDE, tool("HeyGen or Synthesia", "AI avatar presenter, lip-synced to your script", "https://www.heygen.com", "freemium"), ELEVEN, CAPCUT],
+    steps: [
+      { title: "Script for a presenter", body: "Ask AI for a conversational 45–60s script with natural pauses (use commas/periods).", prompt: "Write a 50-second talking-head script for [TOPIC] for [AUDIENCE]. Conversational, short sentences, one idea per line, end with a question to drive comments." },
+      { title: "Choose or create the avatar", body: "Pick a stock avatar, or record the required consent + training clip to create your own. Only create avatars of yourself or people who gave written consent." },
+      { title: "Voice", body: "Use the tool's built-in voice or upload an ElevenLabs voiceover for more realism." },
+      { title: "Generate & review", body: "Render in 9:16 for social or 16:9 for YouTube. Check lip-sync and pronunciation; fix with phonetic spelling." },
+      { title: "Finish", body: "Add captions, B-roll cutaways and a CTA end card in CapCut. Disclose that it's an AI avatar." },
+    ],
+  },
+  {
+    id: "pb-product-ad",
+    title: "Product Ad Video (UGC style)",
+    category: "video",
+    level: 3,
+    minutes: 60,
+    emoji: "🛍️",
+    outcome: "A 15–20s scroll-stopping product ad for Instagram/TikTok.",
+    tools: [CLAUDE, tool("Product photos (phone) + background remover", "Clean product cutouts", "https://www.remove.bg", "freemium"), VIDEOGEN, ELEVEN, CAPCUT],
+    steps: [
+      { title: "Angle & hooks", body: "Ask AI for 10 ad hooks using problem→solution, social proof and before/after angles.", prompt: "You are a direct-response ad strategist. Product: [PRODUCT]. Customer: [WHO]. Write 10 hooks (max 9 words) using problem/solution, before/after and social-proof angles, then a 15-second script for the best one." },
+      { title: "Shoot or generate", body: "Take 5 clean product photos. Use image-to-video in your AI video tool to animate them (slow push-in, rotating, lifestyle background)." },
+      { title: "Voice + music", body: "Generate an upbeat voiceover in ElevenLabs. Add licensed music from CapCut's library." },
+      { title: "Edit", body: "Hook in the first 1.5s, product on screen by 3s, benefit captions, price/offer, CTA. Keep it under 20 seconds." },
+      { title: "Test", body: "Make 3 versions with different hooks. Run small budgets and keep the winner." },
+    ],
+  },
+  {
+    id: "pb-music-video",
+    title: "AI Song + Lyric/Music Video",
+    category: "audio",
+    level: 2,
+    minutes: 50,
+    emoji: "🎵",
+    outcome: "An original AI song with a matching visualiser or lyric video.",
+    tools: [CLAUDE, tool("Suno or Udio", "Generate full songs from a prompt + lyrics", "https://suno.com", "freemium"), VIDEOGEN, CAPCUT],
+    steps: [
+      { title: "Lyrics", body: "Ask AI for verse/chorus lyrics in your style and theme.", prompt: "Write song lyrics about [THEME] in the style of upbeat [GENRE]: 2 verses, a catchy 4-line chorus repeated twice, a short bridge. Simple words, strong rhymes." },
+      { title: "Generate the song", body: "In Suno/Udio paste the lyrics and a style prompt (genre, mood, tempo, vocals). Generate several takes; keep the best." },
+      { title: "Visuals", body: "Generate looping visuals that match the mood, or use stock footage." },
+      { title: "Lyric video", body: "In CapCut, import the song, use auto-lyrics/captions, sync and style the text." },
+      { title: "Rights check", body: "Commercial use and monetisation usually require the generator's paid plan. Read the license before uploading to streaming services." },
+    ],
+  },
+  {
+    id: "pb-podcast-clips",
+    title: "Turn a Podcast/Livestream into 10 Clips",
+    category: "video",
+    level: 2,
+    minutes: 30,
+    emoji: "✂️",
+    outcome: "Ten captioned short clips from one long recording.",
+    tools: [tool("Opus Clip or Descript", "Auto-find highlights and reframe to vertical", "https://www.opus.pro", "freemium"), CAPCUT, CLAUDE],
+    steps: [
+      { title: "Upload", body: "Upload the long video (or paste a YouTube link) into Opus Clip / Descript." },
+      { title: "Pick highlights", body: "Review AI-suggested clips; keep moments with a strong first sentence." },
+      { title: "Polish", body: "Add captions, a hook title on screen, and a CTA. Trim dead air." },
+      { title: "Captions & schedule", body: "Ask AI for a caption + hashtags per clip, then schedule across platforms.", prompt: "Here is a clip transcript: [PASTE]. Write a post caption under 150 characters with a curiosity hook and 5 relevant hashtags." },
+    ],
+  },
+  {
+    id: "pb-event-flyer",
+    title: "Event Flyer (print + social)",
+    category: "design",
+    level: 1,
+    minutes: 25,
+    emoji: "📄",
+    outcome: "A printable flyer plus an Instagram post and story version.",
+    tools: [CANVA, tool("Adobe Express", "Alternative design tool with Firefly AI", "https://www.adobe.com/express", "freemium", false), CLAUDE],
+    steps: [
+      { title: "Copy first", body: "Ask AI for headline options, details and a call to action.", prompt: "Write flyer copy for [EVENT] on [DATE] at [PLACE] for [AUDIENCE]: 5 headline options (max 6 words), a subline, a details block and a call to action." },
+      { title: "Template", body: "In Canva or Adobe Express search 'event flyer', pick a template close to your vibe." },
+      { title: "Customise", body: "Replace text, use 1 big image (or generate one with Magic Media / Firefly), max 2 fonts, 3 colors. Add a QR code to the RSVP/ticket link." },
+      { title: "Resize", body: "Use Resize to create Instagram post (1080×1350) and story (1080×1920) versions." },
+      { title: "Export", body: "PDF Print for printing (with bleed), PNG for social." },
+    ],
+  },
+  {
+    id: "pb-logo-brand",
+    title: "Logo & Brand Kit",
+    category: "design",
+    level: 2,
+    minutes: 45,
+    emoji: "✒️",
+    outcome: "A logo, color palette, fonts and 5 social templates.",
+    tools: [CLAUDE, tool("AI image generator (ChatGPT, Ideogram, Firefly)", "Logo concepts", "https://ideogram.ai", "freemium"), CANVA],
+    steps: [
+      { title: "Brand brief", body: "Have AI interview you, then write a one-paragraph brand brief.", prompt: "Interview me with 8 questions to define my brand (audience, personality, competitors, values). After I answer, write a brand brief, 3 color palettes with hex codes, and 2 font pairings." },
+      { title: "Logo concepts", body: "Generate 12 simple, flat logo concepts. Pick 2 favourites." },
+      { title: "Rebuild cleanly", body: "Recreate the winner in Canva (shapes + font) so you own an editable version. Export SVG/PNG, light and dark." },
+      { title: "Brand kit", body: "Add logo, colors and fonts to Canva Brand Kit; build 5 templates (post, story, quote, offer, testimonial)." },
+      { title: "Protect", body: "Search your name/logo in your country's trademark database before printing or advertising." },
+    ],
+  },
+  {
+    id: "pb-presentation",
+    title: "Pitch Deck / Presentation in 20 Minutes",
+    category: "business",
+    level: 1,
+    minutes: 20,
+    emoji: "📊",
+    outcome: "A polished 10-slide presentation.",
+    tools: [CLAUDE, tool("Gamma, Canva or Google Slides", "AI-generated slide designs", "https://gamma.app", "freemium")],
+    steps: [
+      { title: "Outline", body: "Ask AI for a 10-slide outline with one message per slide.", prompt: "Create a 10-slide outline for a presentation about [TOPIC] to [AUDIENCE]. One clear message per slide, 3 bullets max, and a suggested visual for each." },
+      { title: "Generate", body: "Paste the outline into Gamma or Canva's Magic Design for Presentations." },
+      { title: "Edit", body: "Replace generic images, add your data and logo, cut words. Big text, one idea per slide." },
+      { title: "Rehearse", body: "Practice with Rreal Coach (Interview mode or Ask anything) and time yourself." },
+    ],
+  },
+  {
+    id: "pb-ebook",
+    title: "eBook / Lead Magnet PDF",
+    category: "business",
+    level: 2,
+    minutes: 60,
+    emoji: "📘",
+    outcome: "A designed 10–15 page PDF guide to grow your email list or sell.",
+    tools: [CLAUDE, CANVA, tool("Email platform (Mailchimp, Kit, Beehiiv)", "Deliver the PDF and collect emails", "https://kit.com", "freemium", false)],
+    steps: [
+      { title: "Topic & outline", body: "Pick one painful problem your audience has. Ask AI for a title and chapter outline.", prompt: "Suggest 5 lead-magnet titles that solve [PROBLEM] for [AUDIENCE], then a 6-chapter outline for the best one with 3 key points each." },
+      { title: "Draft", body: "Write chapter by chapter with AI, then edit in your voice and add your own examples." },
+      { title: "Design", body: "Use a Canva eBook/workbook template. Add your brand kit, charts and checklists." },
+      { title: "Deliver", body: "Export PDF, set up a landing page + email automation to deliver it." },
+    ],
+  },
+  {
+    id: "pb-website-nocode",
+    title: "Business Website (no code)",
+    category: "web",
+    level: 2,
+    minutes: 120,
+    emoji: "🌐",
+    outcome: "A live website on your own domain with a contact form.",
+    tools: [CLAUDE, tool("Website builder (Wix, Squarespace, Framer or Durable)", "Builds and hosts the site", "https://www.wix.com", "paid"), tool("Domain registrar", "yourbusiness.com", "https://www.namecheap.com", "paid")],
+    steps: [
+      { title: "Sitemap & copy", body: "Generate pages and homepage copy with AI.", prompt: "Write a sitemap and full homepage copy for [BUSINESS] in [CITY] for [CUSTOMERS]. Sections: hero with CTA, services, why us, testimonials placeholder, FAQ (5), contact. Friendly, confident tone." },
+      { title: "Generate the site", body: "Use the builder's AI site generator, then paste your copy into each section." },
+      { title: "Brand it", body: "Apply your logo, colors and fonts. Replace stock photos with real ones where possible." },
+      { title: "Essentials", body: "Contact form, booking or store, page titles/descriptions, alt text, mobile check." },
+      { title: "Go live", body: "Connect your domain, enable HTTPS, add Google Business Profile and Search Console." },
+    ],
+  },
+  {
+    id: "pb-website-code",
+    title: "Custom Website with Claude + GitHub + Vercel",
+    category: "web",
+    level: 3,
+    minutes: 90,
+    emoji: "💻",
+    outcome: "A custom-coded site deployed free with automatic updates.",
+    tools: [tool("Claude", "Writes the code and previews it", "https://claude.ai", "freemium"), tool("GitHub", "Stores your code", "https://github.com", "free"), tool("Vercel", "Hosts the site (free hobby tier)", "https://vercel.com", "freemium"), tool("Domain registrar", "Optional custom domain", "https://www.namecheap.com", "paid", false)],
+    steps: [
+      { title: "Generate", body: "Ask Claude for a complete single-file site and iterate on the preview.", prompt: "You are a senior front-end developer. Build a one-page website for [BUSINESS] as a single index.html using Tailwind via CDN. Sections: [LIST]. Mobile-first, accessible (semantic HTML, alt text, AA contrast), fast. Return only the code." },
+      { title: "Save to GitHub", body: "New repository → Add file → Upload files → index.html → Commit changes." },
+      { title: "Deploy", body: "Vercel → Add New Project → Import your GitHub repo → Deploy. You'll get a live URL." },
+      { title: "Custom domain", body: "Vercel → Project → Settings → Domains → add your domain and follow the DNS instructions." },
+      { title: "Update forever", body: "Ask Claude for changes, replace index.html on GitHub, and Vercel redeploys automatically." },
+    ],
+  },
+  {
+    id: "pb-landing-page",
+    title: "High-Converting Landing Page + Email Capture",
+    category: "web",
+    level: 3,
+    minutes: 60,
+    emoji: "🎯",
+    outcome: "A focused landing page that collects emails or sales.",
+    tools: [CLAUDE, tool("Landing page builder (Carrd, Framer or your website builder)", "Build the page", "https://carrd.co", "freemium"), tool("Email platform", "Store subscribers and send follow-ups", "https://kit.com", "freemium")],
+    steps: [
+      { title: "Offer & copy", body: "One audience, one offer, one action.", prompt: "Write landing page copy for [OFFER] for [AUDIENCE]: headline (max 10 words), subheadline, 3 benefit bullets, social proof placeholders, FAQ (4), and a CTA button label. Persuasive but honest." },
+      { title: "Build", body: "Use a single-column template. Hero → benefits → proof → FAQ → CTA repeated." },
+      { title: "Connect email", body: "Embed your email platform's form; create a welcome email (AI can draft it)." },
+      { title: "Measure", body: "Add analytics, test two headlines, keep the winner." },
+    ],
+  },
+];
+
+export const getPlaybook = (id: string) => PLAYBOOKS.find((p) => p.id === id);
