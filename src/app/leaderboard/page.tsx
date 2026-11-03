@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Crown } from "lucide-react";
-import { RequireAuth } from "@/components/RequireAuth";
+import { RequireMember } from "@/components/RequireAuth";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAcademy } from "@/lib/store";
 import { LEAGUES, leagueFor } from "@/lib/gamification";
@@ -57,5 +57,5 @@ function Board() {
 }
 
 export default function LeaderboardPage() {
-  return <RequireAuth><Board /></RequireAuth>;
+  return <RequireMember><Board /></RequireMember>;
 }

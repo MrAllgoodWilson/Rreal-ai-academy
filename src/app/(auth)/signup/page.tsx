@@ -15,7 +15,7 @@ export default function SignupPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (ready && user) router.replace("/onboarding");
+    if (ready && user) router.replace("/subscribe");
   }, [ready, user, router]);
 
   const usernameErr = f.username && !USERNAME_RE.test(f.username) ? "3–20 characters: letters, numbers, underscores." : undefined;
@@ -23,7 +23,7 @@ export default function SignupPage() {
   return (
     <AuthCard
       title="Create your account"
-      subtitle="Week 1 is free. No credit card."
+      subtitle="Every course and tool for $1/month. Cancel anytime."
       footer={
         <>
           Already have an account? <Link href="/login" className="font-semibold text-neon hover:underline">Sign in</Link>

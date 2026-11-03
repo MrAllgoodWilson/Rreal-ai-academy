@@ -3,9 +3,11 @@
 Guidance for Claude (and humans) working in this repository.
 
 ## What this is
-Rreal AI Academy is a subscription web app (installable PWA) that teaches AI from absolute beginner to expert:
-5 tracks over 8 weeks, interactive lessons, a two-way voice tutor ("Rreal Coach"), a live Prompt Sandbox,
-a Social Video Studio, gamification (XP, streaks, leagues, badges), and signed, publicly verifiable certificates.
+Rreal AI Academy is a $1/month subscription web app (installable PWA, English + Spanish) that teaches AI from absolute beginner to expert:
+the 8-week Mastery Program (5 tracks), 12 standalone courses (Dummy → Expert), step-by-step Playbooks (videos, flyers, websites…),
+an AI Course Creator (learners request any course; admins publish the best to everyone), a two-way voice tutor ("Rreal Coach") with
+selectable voices, a Prompt Sandbox, a Social Video Studio with real AI video rendering, social-account connections, plugins (webhooks),
+gamification, and signed, publicly verifiable certificates (self-issued or accredited).
 Accessibility (blind, deaf, motor, cognitive) is a core requirement, not an add-on.
 
 ## Commands
@@ -45,7 +47,14 @@ src/
   components/               AppShell, A11yPanel, VoiceCoach, PromptLab, LessonBlocks,
                             CertificateArt, CelebrationOverlay, ReadAloud, AuthCard, ui/*
   lib/
-    curriculum/             tracks.ts = ALL course content (typed data) + gating helpers
+    curriculum/             tracks.ts (8-week program), courses.ts (standalone), playbooks.ts, index.ts (catalog + gating, registerTracks for AI courses)
+    i18n.tsx                UI dictionary (en/es) + useTranslated() → /api/translate (Claude, cached in content_translations)
+    voices.ts               coach voice catalog (ElevenLabs premium + device voices)
+    server-auth.ts          getMember() + takeQuota() — membership + fair-use quotas for every paid AI call
+    course-schema.ts        zod validation for AI-generated courses; playbook-schema.ts likewise
+    video.ts, social.ts     Replicate video rendering; Ayrshare social publishing
+    plugins/dispatch.ts     outgoing webhooks (Zapier/Make/Slack/Discord/custom) with SSRF allow-list
+    certificates/accreditation.ts  accredited (partner) vs Rreal-issued credentials
     store.tsx               AcademyProvider: auth, progress, XP, streaks, badges, sync
     a11y.tsx                A11yProvider: prefs, aria-live announcer, TTS, visual alerts
     gamification.ts         pure XP/level/streak/league rules (mirrored in SQL)
@@ -62,7 +71,7 @@ docs/                       product docs, open questions, screenshots
 ```
 
 ## Rules of the road
-1. **Curriculum is data.** Add or edit lessons only in `src/lib/curriculum/tracks.ts`, then regenerate `supabase/seed.sql`.
+1. **Curriculum is data.** Add or edit lessons only in `src/lib/curriculum/tracks.ts` / `courses.ts`, then regenerate `supabase/seed.sql` (`npm run db:seed`).
    Lesson and quiz ids must stay unique and stable (progress is keyed by them). `tests/curriculum.test.ts` enforces this.
 2. **Never trust the client for anything that has value.** XP, streaks, completions, subscriptions and certificates are written only by
    `complete_lesson()` (SECURITY DEFINER), the Stripe webhook (service role), or the certificate issuer (service role).
@@ -82,11 +91,17 @@ docs/                       product docs, open questions, screenshots
    high-contrast variants in `globals.css`.
 
 ## Database (Supabase)
-- Apply `supabase/migrations/0001_init.sql`, then `supabase/seed.sql`.
+- Production project: `rreal-ai-academy` (`vwajwkhlehgmpecrwnur`). Apply migrations in order (0001, 0002), then `supabase/seed.sql`.
+- `tests/sql/v2-checks.sh` runs behavioural checks for 0002 against a local Postgres with Supabase-style stubs.
+- Every lesson is paid (membership); program lessons unlock in order across tracks, course lessons in order inside the course.
+- Paid AI features MUST call `takeQuota()` — at $1/month a single unmetered user can cost more than they pay.
 - Key functions: `complete_lesson`, `username_available` (public), `email_for_username` / `username_for_email` (service role only),
   `leaderboard_weekly`, `certificate_status`.
 - In Supabase Auth settings: enable email confirmations, set Site URL, add `/reset-password` and `/onboarding` to redirect URLs,
   and plug in Resend as custom SMTP so reset emails come from your domain.
+
+## Launch
+See `docs/LAUNCH.md` (Vercel import, env vars, Stripe webhook, Supabase auth settings).
 
 ## Open items
 See `docs/QUESTIONS_FOR_GOOGLE_AGENT.md` for decisions that need the owner's input, and `docs/PRODUCT_BLUEPRINT.md` for the roadmap.

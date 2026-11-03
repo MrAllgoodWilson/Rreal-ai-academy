@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Copy, Trash2 } from "lucide-react";
-import { RequireAuth } from "@/components/RequireAuth";
+import { RequireMember } from "@/components/RequireAuth";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAcademy } from "@/lib/store";
 import { useA11y } from "@/lib/a11y";
@@ -45,5 +45,5 @@ function Portfolio() {
 }
 
 export default function PortfolioPage() {
-  return <RequireAuth><Portfolio /></RequireAuth>;
+  return <RequireMember><Portfolio /></RequireMember>;
 }

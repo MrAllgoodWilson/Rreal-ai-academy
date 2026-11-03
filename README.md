@@ -2,8 +2,11 @@
 
 **From “what is AI?” to AI expert.** An interactive, voice-guided, fully accessible, subscription AI academy.
 
-5 tracks · 8 weeks · 33 interactive lessons · two-way voice coach with live captions · live Prompt Sandbox with instant grading ·
-Social Video Studio · XP, streaks, leagues and 19 badges · signed, publicly verifiable certificates with one-click LinkedIn sharing.
+**$1/month** · English & Español · 8-week Mastery Program + 12 standalone courses (Dummy → Expert) · 12 step-by-step Playbooks ·
+AI Course Creator (ask for any course) · voice coach with 12 selectable voices · real AI video rendering · social account connections ·
+plugins · XP, streaks, leagues and badges · signed, verifiable certificates (Rreal-issued or accredited) with one-click LinkedIn.
+
+**Going live? Follow [docs/LAUNCH.md](docs/LAUNCH.md).**
 
 ![Landing page](docs/screenshots/01-landing.png)
 

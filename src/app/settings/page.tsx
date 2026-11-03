@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { RequireAuth } from "@/components/RequireAuth";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { A11ySettings } from "@/components/A11yPanel";
+import { VoicePicker } from "@/components/VoicePicker";
+import { useI18n } from "@/lib/i18n";
 import { FormAlert } from "@/components/AuthCard";
 import { useAcademy } from "@/lib/store";
 
@@ -15,6 +17,7 @@ function Settings() {
   const router = useRouter();
   const [name, setName] = useState(user!.displayName);
   const [msg, setMsg] = useState("");
+  const { lang, setLang } = useI18n();
 
   const billing = async () => {
     const r = await fetch("/api/stripe/portal", { method: "POST" });
@@ -66,6 +69,16 @@ function Settings() {
           </div>
         </section>
 
+        <section className="card space-y-4" aria-labelledby="voice-h">
+          <h2 id="voice-h" className="font-display text-xl font-semibold">Language & coach voice</h2>
+          <div role="radiogroup" aria-label="Language" className="flex gap-2">
+            {(["en", "es"] as const).map((l) => (
+              <button key={l} type="button" role="radio" aria-checked={lang === l} onClick={() => setLang(l)} className={`btn-ghost ${lang === l ? "border-neon" : ""}`}>{l === "en" ? "English" : "Español"}</button>
+            ))}
+          </div>
+          <VoicePicker />
+        </section>
+
         <section className="card" aria-labelledby="a11y-h">
           <h2 id="a11y-h" className="font-display text-xl font-semibold">Accessibility</h2>
           <A11ySettings />
@@ -76,7 +89,7 @@ function Settings() {
           <p>Status: <strong className="capitalize">{subscription.status === "none" ? "Free" : subscription.status}</strong>{subscription.plan && ` · ${subscription.plan}`}</p>
           <div className="flex flex-wrap gap-3">
             <button type="button" className="btn-ghost" onClick={() => router.push("/pricing")}>Change plan</button>
-            {subscription.status !== "none" && <button type="button" className="btn-ghost" onClick={billing}>Manage billing</button>}
+            {subscription.status !== "none" && <button type="button" className="btn-ghost" onClick={billing}>Manage billing / cancel</button>}
           </div>
         </section>
 

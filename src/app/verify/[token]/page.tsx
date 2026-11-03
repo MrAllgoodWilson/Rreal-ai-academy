@@ -39,7 +39,9 @@ export default async function VerifyPage({ params }: { params: { token: string }
             <dl className="mt-8 grid gap-4 text-left sm:grid-cols-2">
               {[
                 ["Recipient", result.payload.n],
-                ["Credential", credentialTitle(result.payload.t)],
+                ["Credential", credentialTitle(result.payload.t, result.payload.ti)],
+                ["Type", result.payload.a ? "Accredited credential" : "Rreal Certified (issued by Rreal AI Academy)"],
+                ...(result.payload.a ? [["Accredited partner", `${result.payload.a.p} · ${result.payload.a.b}${result.payload.a.id ? ` #${result.payload.a.id}` : ""}`], ["Continuing education units", `${result.payload.a.ceu} CEU`]] : []),
                 ["Issued", new Date(result.payload.i).toLocaleDateString("en-US", { dateStyle: "long" })],
                 ["Credential ID", credentialCode(result.payload)],
                 ...(result.payload.s ? [["Score", `${result.payload.s}%`]] : []),
@@ -54,6 +56,7 @@ export default async function VerifyPage({ params }: { params: { token: string }
             <p className="mt-6 flex items-center justify-center gap-2 text-xs text-muted">
               <CheckCircle2 className="h-4 w-4 text-lime" aria-hidden="true" /> Fingerprint {fingerprint(token).slice(0, 16)}…
             </p>
+            <p className="mt-2 text-center text-xs"><a className="text-neon underline" href={`/api/credentials/${encodeURIComponent(token)}`}>Open Badges 3.0 (JSON-LD)</a></p>
           </>
         ) : (
           <p className="mt-3 text-muted">{result.reason}</p>
