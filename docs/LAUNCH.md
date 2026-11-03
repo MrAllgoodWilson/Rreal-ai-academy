@@ -3,15 +3,18 @@
 Everything that can be done from code is done. These are the remaining steps that need **your** accounts.
 Total time: about 20–30 minutes. Hosting: **Cloudflare Workers**.
 
-## What's already set up
+## Live status (updated by Claude)
+**Live URL:** https://rreal-ai-academy.alwilson-abc.workers.dev (Cloudflare Workers, deployed from the owner's machine with `~/rreal-deploy.sh`)
+
 | Item | Status |
 |---|---|
-| GitHub repo `MrAllgoodWilson/rreal-ai-academy` | ✅ code pushed (PR #1) |
-| Cloudflare Workers config (OpenNext) | ✅ built + tested in the Workers runtime |
-| Supabase project **rreal-ai-academy** (`vwajwkhlehgmpecrwnur`, us-east-1) | ✅ created, migration 0001 applied |
-| Supabase migration 0002 + course seed | ⏳ run in the Supabase SQL editor (step 2) — the connector approval prompt timed out twice |
-| Stripe product + **$1/month** price `price_1UXevHK68Pw0CGHvMMNt6NeD` | ✅ live |
-| Stripe payment link (fallback checkout) `https://buy.stripe.com/7sY5kEfff2MUb3Y5tWcQU09` | ✅ live |
+| Supabase `rreal-ai-academy` — migrations 0001, 0002, 0003 + seed (17 courses / 69 lessons) | ✅ applied |
+| Cloudflare Worker `rreal-ai-academy` (Workers Paid) | ✅ deployed, connected to Supabase |
+| Secrets: `CERT_SIGNING_SECRET`, `ADMIN_EMAILS`, `STRIPE_WEBHOOK_SECRET` | ✅ set |
+| Stripe $1/month price, payment link (redirects back to the site), live webhook `we_1UXpIWK68Pw0CGHvolRNKn5E` | ✅ |
+| `SUPABASE_SERVICE_ROLE_KEY` + AI/voice/video/social/email keys | ⏳ owner fills `~/rreal-secrets.env`, then runs `~/rreal-upload-keys.sh` |
+| Supabase Auth URL configuration + custom SMTP | ⏳ owner (dashboard only) |
+| GitHub → Cloudflare auto-deploy (Workers Builds) | optional — redeploy any time with `~/rreal-deploy.sh https://rreal-ai-academy.alwilson-abc.workers.dev` |
 
 ## 1. Deploy on Cloudflare Workers (gets you the live link)
 The app runs on Cloudflare Workers through the official OpenNext adapter (`wrangler.jsonc`, `open-next.config.ts`). It was built and fully tested in Cloudflare's runtime (67/67 checks).
