@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------- Design tokens (dark neon primary theme) ---------- */
+:root {
+  --bg: 7 9 18;
+  --surface: 14 18 34;
+  --raised: 22 28 50;
+  --line: 44 54 92;
+  --ink: 244 246 255;
+  --muted: 170 180 214;   /* 8.9:1 on --bg */
+  --neon: 34 211 238;     /* cyan */
+  --violet: 167 139 250;
+  --lime: 163 230 53;
+  --flame: 251 146 60;
+  --danger: 248 113 113;
+  --font-scale: 1;
+  color-scheme: dark;
+}
+
+/* Light theme (user toggle) */
+html[data-theme="light"] {
+  --bg: 248 250 255;
+  --surface: 255 255 255;
+  --raised: 238 242 252;
+  --line: 203 211 235;
+  --ink: 10 14 30;
+  --muted: 62 72 104;
+  --neon: 8 112 140;
+  --violet: 91 60 196;
+  --lime: 63 120 12;
+  --flame: 176 72 8;
+  --danger: 180 30 30;
+  color-scheme: light;
+}
+
+/* High contrast (WCAG AAA 7:1+ everywhere, no translucency) */
+html[data-contrast="high"] {
+  --bg: 0 0 0;
+  --surface: 0 0 0;
+  --raised: 18 18 18;
+  --line: 255 255 255;
+  --ink: 255 255 255;
+  --muted: 235 235 235;
+  --neon: 0 255 255;
+  --violet: 255 230 0;
+  --lime: 0 255 120;
+  --flame: 255 200 0;
+  --danger: 255 120 120;
+}
+html[data-contrast="high"] .glass { background: rgb(var(--surface)); backdrop-filter: none; border-color: rgb(var(--line)); }
+html[data-contrast="high"] .bg-grid, html[data-contrast="high"] .aurora { display: none; }
+html[data-contrast="high"] a { text-decoration: underline; }
+
+html { font-size: calc(100% * var(--font-scale)); }
+body { @apply bg-bg text-ink antialiased; }
+
+html[data-readable="true"] body { letter-spacing: 0.02em; word-spacing: 0.08em; line-height: 1.8; }
+
+/* Visible, consistent focus for keyboard users */
+:focus-visible { outline: 3px solid rgb(var(--neon)); outline-offset: 3px; border-radius: 8px; }
+
+/* Reduced motion — honoured from OS setting AND the in-app toggle */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+html[data-motion="reduce"] *, html[data-motion="reduce"] *::before, html[data-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important;
+}
+
+@layer components {
+  .glass { @apply rounded-2xl border border-line/60 bg-surface/70 backdrop-blur-xl; }
+  .btn { @apply inline-flex min-h-[44px] whitespace-nowrap items-center justify-center gap-2 rounded-xl px-5 py-2.5 font-semibold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-primary { @apply btn bg-neon text-bg hover:shadow-glow active:scale-[0.98]; }
+  .btn-violet { @apply btn bg-violet text-bg hover:shadow-glow-violet active:scale-[0.98]; }
+  .btn-ghost { @apply btn border border-line bg-raised/40 text-ink hover:border-neon/70 hover:bg-raised; }
+  .input { @apply min-h-[44px] w-full rounded-xl border border-line bg-bg/60 px-4 py-2.5 text-ink placeholder:text-muted/70 focus:border-neon focus:outline-none focus:ring-2 focus:ring-neon/40; }
+  .label { @apply mb-1.5 block text-sm font-medium text-ink; }
+  .chip { @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-raised/60 px-3 py-1 text-xs font-medium text-muted; }
+  .heading-gradient { @apply bg-gradient-to-r from-neon via-violet to-flame bg-clip-text text-transparent; }
+  .card { @apply glass p-5 sm:p-6; }
+}
+
+html[data-contrast="high"] .heading-gradient { background: none; color: rgb(var(--neon)); -webkit-text-fill-color: currentColor; }
+
+.bg-grid {
+  background-image: linear-gradient(rgb(var(--line) / 0.25) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--line) / 0.25) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at top, black 30%, transparent 75%);
+}
+.aurora {
+  background: radial-gradient(40% 50% at 20% 10%, rgb(var(--neon) / 0.18), transparent 70%),
+              radial-gradient(35% 45% at 85% 20%, rgb(var(--violet) / 0.22), transparent 70%),
+              radial-gradient(30% 40% at 50% 90%, rgb(var(--flame) / 0.10), transparent 70%);
+}
+
+.sr-only-focusable:not(:focus) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Print = clean certificate PDF */
+@media print {
+  body * { visibility: hidden; }
+  #certificate-print, #certificate-print * { visibility: visible; }
+  #certificate-print { position: fixed; inset: 0; width: 100%; }
+  @page { size: landscape; margin: 0; }
+}
