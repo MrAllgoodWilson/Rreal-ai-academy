@@ -110,3 +110,10 @@ See `docs/LAUNCH.md` for the full go-live steps.
 
 ## Open items
 See `docs/QUESTIONS_FOR_GOOGLE_AGENT.md` for decisions that need the owner's input, and `docs/PRODUCT_BLUEPRINT.md` for the roadmap.
+
+## Smart Guys review (owner's standing instruction)
+Run every significant product, pricing, architecture or launch decision past the **Smart Guys** panel before acting —
+see `docs/SMART_GUYS.md`. The lenses (Jobs, Zuckerberg, Cuban, Musk, Huang, Krishna, Su, Altman) are applied philosophies
+written by Claude, not the real people: never invent quotes or imply endorsement. Present each lens's position, the
+disagreements, and a recommendation; the owner decides; log the decision in `docs/DECISIONS.md`.
+Latest review: `docs/SMART_GUYS_REVIEW.md`.
