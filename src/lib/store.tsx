@@ -319,13 +319,21 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
     if (issues.length) return { ok: false, error: `Password needs ${issues.join(", ")}.` };
     const sb = getSupabaseBrowser();
     if (sb) {
+      // Preferred: server creates a confirmed account and signs in (no email round-trip).
+      const res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, username, password, displayName }) });
+      if (res.status !== 501) {
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) return { ok: false, error: json.error ?? "Couldn't create your account." };
+        await sb.auth.refreshSession();
+        return json.signedIn ? { ok: true } : { ok: true, message: "Account created. Please sign in." };
+      }
       const { data: available, error: rpcErr } = await sb.rpc("username_available", { p_username: username });
       if (rpcErr) return { ok: false, error: "Couldn't check that username. Try again." };
       if (!available) return { ok: false, error: "That username is taken. Try another." };
       const { data, error } = await sb.auth.signUp({
         email,
         password,
-        options: { data: { username, display_name: displayName }, emailRedirectTo: `${location.origin}/onboarding` },
+        options: { data: { username, display_name: displayName }, emailRedirectTo: `${location.origin}/subscribe` },
       });
       if (error) return { ok: false, error: error.message };
       if (!data.session) return { ok: true, message: "Check your email to confirm your account, then sign in." };
@@ -376,7 +384,8 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
     const msg = "If an account exists for that email, a reset link is on its way. It expires in 1 hour.";
     const sb = getSupabaseBrowser();
     if (sb) {
-      await sb.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/reset-password` });
+      const res = await fetch("/api/auth/reset-request", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }) });
+      if (res.status === 501) await sb.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/reset-password` });
       return { ok: true, message: msg };
     }
     const exists = read<StoredAccount[]>(K.accounts, []).some((a) => a.email === email);
