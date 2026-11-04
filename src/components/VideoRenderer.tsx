@@ -5,6 +5,7 @@ import { Download, Film, Loader2 } from "lucide-react";
 import { FormAlert } from "@/components/AuthCard";
 import { useA11y } from "@/lib/a11y";
 import { useAcademy } from "@/lib/store";
+import { apiHeaders } from "@/lib/byok";
 
 /** Renders a real AI video clip from a scene prompt and polls until it's ready. */
 export function VideoRenderer({ defaultPrompt }: { defaultPrompt: string }) {
@@ -22,7 +23,7 @@ export function VideoRenderer({ defaultPrompt }: { defaultPrompt: string }) {
     setError("");
     setUrl("");
     setStatus("queued");
-    const r = await fetch("/api/video/render", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt }) });
+    const r = await fetch("/api/video/render", { method: "POST", headers: apiHeaders(), body: JSON.stringify({ prompt }) });
     const j = await r.json().catch(() => ({ error: `Server error (${r.status})` }));
     if (!r.ok) {
       setStatus("failed");
@@ -31,7 +32,7 @@ export function VideoRenderer({ defaultPrompt }: { defaultPrompt: string }) {
     }
     announce("Rendering started. AI video usually takes one to five minutes.");
     timer.current = setInterval(async () => {
-      const p = await fetch(`/api/video/${j.id}`, { cache: "no-store" }).then((x) => x.json()).catch(() => null);
+      const p = await fetch(`/api/video/${j.id}`, { cache: "no-store", headers: apiHeaders() }).then((x) => x.json()).catch(() => null);
       if (!p) return;
       setStatus(p.status);
       if (p.status === "succeeded") {

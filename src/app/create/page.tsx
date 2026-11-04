@@ -11,6 +11,7 @@ import { useAcademy } from "@/lib/store";
 import { useI18n } from "@/lib/i18n";
 import { useA11y } from "@/lib/a11y";
 import { LEVEL_NAMES, type Track } from "@/lib/curriculum";
+import { apiHeaders } from "@/lib/byok";
 
 const IDEAS = [
   "Teach me to make a Christmas sale flyer for my nail salon",
@@ -45,7 +46,7 @@ function Creator() {
     setCreated(null);
     announce("Building your course. This can take up to a minute.");
     try {
-      const res = await fetch("/api/courses/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ request, level, language, category }) });
+      const res = await fetch("/api/courses/generate", { method: "POST", headers: apiHeaders(), body: JSON.stringify({ request, level, language, category }) });
       const json = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
       if (!res.ok) throw new Error(json.error);
       addCustomCourse(json.track);

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { callClaude } from "@/lib/claude";
 import { COURSE_SYSTEM_PROMPT, CATEGORIES, GeneratedCourseSchema, toTrack } from "@/lib/course-schema";
 import { getMember, takeQuota, spendCredit, refundCredit } from "@/lib/server-auth";
+import { readByok, ownsTextAi } from "@/lib/byok-server";
 import { dispatchPluginEvent } from "@/lib/plugins/dispatch";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import type { Category, TrackLevel } from "@/lib/curriculum/types";
@@ -26,15 +27,20 @@ export async function POST(req: Request) {
 
   const who = await getMember({ requireSubscription: true });
   if ("error" in who) return who.error;
-  if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "The AI course builder isn't configured yet (missing ANTHROPIC_API_KEY)." }, { status: 503 });
+  // Members who connect their own Claude/ChatGPT account build courses free; otherwise a $9.99 course credit is used.
+  const byok = readByok(req);
+  let charged = false;
   const spendRef = `course:${randomBytes(8).toString("hex")}`;
   if (!who.demo) {
     const limited = await takeQuota(who.member, "course");
     if (limited) return limited;
-    if (!(await spendCredit(who.member, "course", spendRef))) return NextResponse.json({ error: "Creating your own course costs $9.99. Buy a course credit to continue.", code: "credits_required", kind: "course" }, { status: 402 });
+    if (!ownsTextAi(byok)) {
+      charged = await spendCredit(who.member, "course", spendRef);
+      if (!charged) return NextResponse.json({ error: "Creating your own course costs $9.99. Buy a course credit to continue.", code: "credits_required", kind: "course" }, { status: 402 });
+    }
   }
   const refund = async () => {
-    if (!who.demo) await refundCredit(who.member.user.id, "course", spendRef);
+    if (!who.demo && charged) await refundCredit(who.member.user.id, "course", spendRef);
   };
 
   const levelName = ["", "absolute beginner (dummy)", "beginner", "intermediate", "advanced", "expert"][level];
@@ -42,6 +48,7 @@ export async function POST(req: Request) {
     system: COURSE_SYSTEM_PROMPT,
     messages: [{ role: "user", content: `Learner request: """${request}"""\nLevel: ${levelName}\nWrite the entire course in ${language === "es" ? "Latin American Spanish" : "English"}.` }],
     maxTokens: 8000,
+    byok,
   }).catch(() => null);
   if (!raw) {
     await refund();

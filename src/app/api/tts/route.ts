@@ -4,6 +4,7 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { DEFAULT_PREMIUM_VOICE, isPremiumVoice } from "@/lib/voices";
 import { getMember, takeQuota } from "@/lib/server-auth";
 import { cfAiAvailable, cfSpeech } from "@/lib/cf-ai";
+import { readByok } from "@/lib/byok-server";
 
 /**
  * Premium text-to-speech: ElevenLabs (multilingual, selectable voices) when ELEVENLABS_API_KEY is set,
@@ -11,7 +12,8 @@ import { cfAiAvailable, cfSpeech } from "@/lib/cf-ai";
  * 204 = no premium voice available → the client uses the device voice.
  */
 export async function POST(req: Request) {
-  const key = process.env.ELEVENLABS_API_KEY;
+  const own = readByok(req).elevenlabs;
+  const key = own || process.env.ELEVENLABS_API_KEY;
   if (!key && !(await cfAiAvailable())) return new NextResponse(null, { status: 204 });
   if (!rateLimit(`tts:${clientIp(req)}`, 30, 60_000).ok) return new NextResponse(null, { status: 204 });
   const parsed = z.object({ text: z.string().min(1).max(1500), voiceId: z.string().max(64).optional(), lang: z.enum(["en", "es"]).optional() }).safeParse(await req.json().catch(() => null));
@@ -19,7 +21,7 @@ export async function POST(req: Request) {
 
   const who = await getMember({ requireSubscription: true });
   if ("error" in who) return new NextResponse(null, { status: 204 });
-  if (!who.demo && (await takeQuota(who.member, "tts"))) return new NextResponse(null, { status: 204 });
+  if (!who.demo && !own && (await takeQuota(who.member, "tts"))) return new NextResponse(null, { status: 204 });
 
   if (!key) {
     const audio = await cfSpeech(parsed.data.text, parsed.data.lang ?? "en");

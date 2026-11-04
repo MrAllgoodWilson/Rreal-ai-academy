@@ -3,6 +3,7 @@ import { z } from "zod";
 import { callClaude } from "@/lib/claude";
 import { PLAYBOOK_SYSTEM_PROMPT, PlaybookSchema } from "@/lib/playbook-schema";
 import { getMember, takeQuota } from "@/lib/server-auth";
+import { readByok, ownsTextAi } from "@/lib/byok-server";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 export const maxDuration = 90;
@@ -14,8 +15,8 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Describe what you want to create." }, { status: 400 });
   const who = await getMember({ requireSubscription: true });
   if ("error" in who) return who.error;
-  if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "The AI playbook builder isn't configured yet (missing ANTHROPIC_API_KEY)." }, { status: 503 });
-  if (!who.demo) {
+  const byok = readByok(req);
+  if (!who.demo && !ownsTextAi(byok)) {
     const limited = await takeQuota(who.member, "playbook");
     if (limited) return limited;
   }
@@ -23,6 +24,7 @@ export async function POST(req: Request) {
     system: PLAYBOOK_SYSTEM_PROMPT,
     messages: [{ role: "user", content: `I want to create: """${parsed.data.request}"""\nWrite it in ${parsed.data.language === "es" ? "Latin American Spanish" : "English"}.` }],
     maxTokens: 4000,
+    byok,
   }).catch(() => null);
   if (!raw) return NextResponse.json({ error: "Couldn't build that playbook right now. Try again." }, { status: 502 });
   try {

@@ -87,3 +87,18 @@ export async function cfSpeech(text: string, lang: "en" | "es"): Promise<Uint8Ar
 export async function cfAiAvailable() {
   return Boolean(await getAi());
 }
+
+export const CF_IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
+
+/** Flux image generation (flyers, thumbnails, logos). Returns base64 JPEG or null. */
+export async function cfImage(prompt: string): Promise<string | null> {
+  const ai = await getAi();
+  if (!ai) return null;
+  try {
+    const out = (await ai.run(CF_IMAGE_MODEL, { prompt, steps: 6 })) as { image?: string } | null;
+    return typeof out?.image === "string" ? out.image : null;
+  } catch (e) {
+    console.error("Workers AI image error", e);
+    return null;
+  }
+}

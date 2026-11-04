@@ -9,6 +9,7 @@ import { getLessonRef } from "@/lib/curriculum";
 import type { CoachMode } from "@/lib/coach-offline";
 import { SPEECH_LANG, useI18n } from "@/lib/i18n";
 import { VoicePicker } from "@/components/VoicePicker";
+import { apiHeaders } from "@/lib/byok";
 
 /* Minimal typings for the Web Speech API (not in TS DOM lib everywhere) */
 type SpeechRecognitionLike = {
@@ -133,7 +134,7 @@ export function VoiceCoach({ lessonId }: { lessonId?: string }) {
       setSpeaking(true);
       // Premium voice via ElevenLabs if configured, otherwise browser TTS
       try {
-        const res = prefs.voiceProvider === "premium" ? await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voiceId: prefs.premiumVoiceId, lang }) }) : null;
+        const res = prefs.voiceProvider === "premium" ? await fetch("/api/tts", { method: "POST", headers: apiHeaders(), body: JSON.stringify({ text, voiceId: prefs.premiumVoiceId, lang }) }) : null;
         if (res?.ok && res.headers.get("content-type")?.includes("audio")) {
           const url = URL.createObjectURL(await res.blob());
           const a = new Audio(url);
@@ -179,7 +180,7 @@ export function VoiceCoach({ lessonId }: { lessonId?: string }) {
       try {
         const res = await fetch("/api/coach", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: apiHeaders(),
           body: JSON.stringify({ messages: next.slice(-12), mode: modeOverride ?? mode, lessonId, lang, pendingQuizId: pendingQuiz.current, learner: { level: progress.onboarding.placementLevel, goal: progress.onboarding.goal } }),
         });
         const json = await res.json();

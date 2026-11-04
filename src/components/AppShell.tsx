@@ -193,6 +193,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <ul className="flex flex-wrap gap-x-5 gap-y-2">
                 <li><Link href="/pricing" className="hover:text-ink">Pricing</Link></li>
                 <li><Link href="/accessibility" className="hover:text-ink">Accessibility</Link></li>
+                <li><Link href="/sponsors" className="hover:text-ink">Sponsors</Link></li>
                 <li><Link href="/verify" className="hover:text-ink">Verify a credential</Link></li>
                 <li><Link href="/privacy" className="hover:text-ink">Privacy</Link></li>
                 <li><Link href="/terms" className="hover:text-ink">Terms</Link></li>

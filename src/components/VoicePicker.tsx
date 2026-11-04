@@ -5,6 +5,7 @@ import { Play, Square } from "lucide-react";
 import { useA11y } from "@/lib/a11y";
 import { useI18n } from "@/lib/i18n";
 import { PREMIUM_VOICES, guessGender, type Gender } from "@/lib/voices";
+import { apiHeaders } from "@/lib/byok";
 
 const SAMPLE = { en: "Hi! I'm your Rreal Coach. Let's learn something amazing today.", es: "¡Hola! Soy tu Coach Rreal. Aprendamos algo increíble hoy." };
 
@@ -41,7 +42,7 @@ export function VoicePicker() {
   const previewPremium = async (id: string) => {
     stop();
     setPlaying(id);
-    const res = await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: SAMPLE[lang], voiceId: id, lang }) }).catch(() => null);
+    const res = await fetch("/api/tts", { method: "POST", headers: apiHeaders(), body: JSON.stringify({ text: SAMPLE[lang], voiceId: id, lang }) }).catch(() => null);
     if (res?.ok && res.headers.get("content-type")?.includes("audio")) {
       const a = new Audio(URL.createObjectURL(await res.blob()));
       a.dataset.voicePreview = "1";

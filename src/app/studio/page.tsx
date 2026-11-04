@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { CalendarPlus, Check, Pause, Play, RefreshCw, Save, Trash2 } from "lucide-react";
 import { RequireMember } from "@/components/RequireAuth";
 import { VideoRenderer } from "@/components/VideoRenderer";
+import { ImageMaker } from "@/components/ImageMaker";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { generateHooks, generateScript, toICS, totalSeconds, type Platform, type Scene } from "@/lib/studio";
 import { useAcademy } from "@/lib/store";
@@ -215,6 +216,7 @@ function Studio() {
               </div>
               <div className="md:col-span-2">
                 <VideoRenderer defaultPrompt={`${scenes[1]?.visual ?? scenes[0]?.visual ?? ""}. Topic: ${niche}. Vertical 9:16, cinematic lighting, smooth camera motion, no text.`} />
+                <div className="mt-6"><ImageMaker /></div>
               </div>
             </div>
           )}

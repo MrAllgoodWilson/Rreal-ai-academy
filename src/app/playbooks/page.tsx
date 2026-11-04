@@ -11,6 +11,7 @@ import { PlaybookView } from "@/components/PlaybookView";
 import { PLAYBOOKS, LEVEL_NAMES, type Playbook } from "@/lib/curriculum";
 import { useAcademy } from "@/lib/store";
 import { useI18n } from "@/lib/i18n";
+import { apiHeaders } from "@/lib/byok";
 
 const CATS = ["all", "video", "design", "web", "audio", "business"] as const;
 const SAVED = "rreal.v1.playbooks";
@@ -35,7 +36,7 @@ function Playbooks() {
     setBusy(true);
     setError("");
     try {
-      const r = await fetch("/api/playbooks/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ request, language: lang }) });
+      const r = await fetch("/api/playbooks/generate", { method: "POST", headers: apiHeaders(), body: JSON.stringify({ request, language: lang }) });
       const j = await r.json().catch(() => ({ error: `Server error (${r.status})` }));
       if (!r.ok) throw new Error(j.error);
       setCustom(j.playbook);

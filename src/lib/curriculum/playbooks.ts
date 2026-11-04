@@ -12,6 +12,7 @@ const CLAUDE = tool("Claude or ChatGPT", "Ideas, scripts, prompts and copy", "ht
 const ELEVEN = tool("ElevenLabs", "Realistic AI voiceover", "https://elevenlabs.io", "freemium");
 const CAPCUT = tool("CapCut", "Editing, auto-captions, music, export 9:16", "https://www.capcut.com", "freemium");
 const CANVA = tool("Canva", "Templates, design, brand kit, covers", "https://www.canva.com", "freemium");
+const IFILMS = tool("iFilms Studios", "Your own channel to publish films, series and music videos, and keep your cut", "https://ifilmsstudio.pics", "paid", false);
 const VIDEOGEN = tool("AI video generator (Runway, Kling, Luma, Veo or Higgsfield)", "Generate B-roll / scenes from text or images", "https://runwayml.com", "paid");
 
 export const PLAYBOOKS: Playbook[] = [
@@ -23,7 +24,7 @@ export const PLAYBOOKS: Playbook[] = [
     minutes: 45,
     emoji: "🎬",
     outcome: "A 30-second captioned vertical video with AI voice and AI visuals, ready to post.",
-    tools: [CLAUDE, ELEVEN, VIDEOGEN, CAPCUT, tool("Pexels", "Free stock B-roll if you don't generate", "https://www.pexels.com", "free", false)],
+    tools: [CLAUDE, ELEVEN, VIDEOGEN, CAPCUT, tool("Pexels", "Free stock B-roll if you don't generate", "https://www.pexels.com", "free", false), IFILMS],
     steps: [
       { title: "Write the script", body: "Ask AI for a 30-second script: hook (≤2s), 3 value beats, call to action. Read it aloud and trim to ~75 words.", prompt: "You are a short-form video strategist. Write a 30-second voiceover script (max 75 words) about [TOPIC] for [AUDIENCE]. Structure: hook under 10 words, 3 quick value beats, CTA. Also give 4 matching visual scene descriptions, one per beat, vertical 9:16." },
       { title: "Generate the voiceover", body: "Paste the script into ElevenLabs → Text to Speech. Pick a voice that fits (energetic for hooks, calm for tutorials). Download MP3." },
@@ -41,7 +42,7 @@ export const PLAYBOOKS: Playbook[] = [
     minutes: 40,
     emoji: "🧑‍💼",
     outcome: "A presenter-style video using a digital avatar (yours or a stock one).",
-    tools: [CLAUDE, tool("HeyGen or Synthesia", "AI avatar presenter, lip-synced to your script", "https://www.heygen.com", "freemium"), ELEVEN, CAPCUT],
+    tools: [CLAUDE, tool("HeyGen or Synthesia", "AI avatar presenter, lip-synced to your script", "https://www.heygen.com", "freemium"), ELEVEN, CAPCUT, IFILMS],
     steps: [
       { title: "Script for a presenter", body: "Ask AI for a conversational 45–60s script with natural pauses (use commas/periods).", prompt: "Write a 50-second talking-head script for [TOPIC] for [AUDIENCE]. Conversational, short sentences, one idea per line, end with a question to drive comments." },
       { title: "Choose or create the avatar", body: "Pick a stock avatar, or record the required consent + training clip to create your own. Only create avatars of yourself or people who gave written consent." },
@@ -75,13 +76,14 @@ export const PLAYBOOKS: Playbook[] = [
     minutes: 50,
     emoji: "🎵",
     outcome: "An original AI song with a matching visualiser or lyric video.",
-    tools: [CLAUDE, tool("Suno or Udio", "Generate full songs from a prompt + lyrics", "https://suno.com", "freemium"), VIDEOGEN, CAPCUT],
+    tools: [CLAUDE, tool("Suno or Udio", "Generate full songs from a prompt + lyrics", "https://suno.com", "freemium"), VIDEOGEN, CAPCUT, IFILMS],
     steps: [
       { title: "Lyrics", body: "Ask AI for verse/chorus lyrics in your style and theme.", prompt: "Write song lyrics about [THEME] in the style of upbeat [GENRE]: 2 verses, a catchy 4-line chorus repeated twice, a short bridge. Simple words, strong rhymes." },
       { title: "Generate the song", body: "In Suno/Udio paste the lyrics and a style prompt (genre, mood, tempo, vocals). Generate several takes; keep the best." },
       { title: "Visuals", body: "Generate looping visuals that match the mood, or use stock footage." },
       { title: "Lyric video", body: "In CapCut, import the song, use auto-lyrics/captions, sync and style the text." },
       { title: "Rights check", body: "Commercial use and monetisation usually require the generator's paid plan. Read the license before uploading to streaming services." },
+      { title: "Distribute on iFilms", body: "Publish the finished song and video on your own iFilms Studios channel (ifilmsstudio.pics) so fans watch it on your channel and you keep your cut." },
     ],
   },
   {
@@ -92,7 +94,7 @@ export const PLAYBOOKS: Playbook[] = [
     minutes: 30,
     emoji: "✂️",
     outcome: "Ten captioned short clips from one long recording.",
-    tools: [tool("Opus Clip or Descript", "Auto-find highlights and reframe to vertical", "https://www.opus.pro", "freemium"), CAPCUT, CLAUDE],
+    tools: [tool("Opus Clip or Descript", "Auto-find highlights and reframe to vertical", "https://www.opus.pro", "freemium"), CAPCUT, CLAUDE, IFILMS],
     steps: [
       { title: "Upload", body: "Upload the long video (or paste a YouTube link) into Opus Clip / Descript." },
       { title: "Pick highlights", body: "Review AI-suggested clips; keep moments with a strong first sentence." },
@@ -214,6 +216,24 @@ export const PLAYBOOKS: Playbook[] = [
       { title: "Build", body: "Use a single-column template. Hero → benefits → proof → FAQ → CTA repeated." },
       { title: "Connect email", body: "Embed your email platform's form; create a welcome email (AI can draft it)." },
       { title: "Measure", body: "Add analytics, test two headlines, keep the winner." },
+    ],
+  },
+  {
+    id: "pb-phone-game",
+    title: "Your First Cell Phone Game",
+    category: "web",
+    level: 2,
+    minutes: 90,
+    emoji: "🎮",
+    outcome: "A playable, original touch-screen game hosted online that anyone can open and add to their phone's home screen.",
+    tools: [CLAUDE, tool("CodePen or StackBlitz", "Run and test the game code in the browser", "https://codepen.io", "free"), tool("itch.io or Netlify Drop", "Free hosting and a shareable link", "https://itch.io", "free"), tool("Kenney.nl", "Free game art and sound packs", "https://kenney.nl", "free", false), tool("Capacitor", "Wrap the web game as an Android/iOS app for the stores", "https://capacitorjs.com", "free", false)],
+    steps: [
+      { title: "One-page plan", body: "Pick one core touch action (tap, swipe, drag), a goal, a lose condition and 3 art-style words.", prompt: "Help me design a simple, original phone game. Ask me 3 quick questions, then write a one-page design: name, goal, core loop, touch controls, scoring, difficulty ramp, art style." },
+      { title: "Generate the game", body: "Ask AI for a complete single-file HTML5 game, portrait, touch controls, start and game-over screens.", prompt: "Create a complete single-file HTML5 canvas game for phones (portrait 9:16, touch only, no external files) based on this design: [PASTE PLAN]. Include start screen, score, game over with restart, and rising difficulty. Comment the code." },
+      { title: "Play-test on your phone", body: "Paste the code into CodePen, open the preview link on your phone and play 5 rounds. Write down every bug in plain words." },
+      { title: "Fix one thing at a time", body: "Send AI one bug or change per message and save each working version.", prompt: "Here is my game code: [PASTE]. Fix only this: [BUG]. Return the full updated file and a one-line summary of the change." },
+      { title: "Art, sound and feel", body: "Swap shapes for sprites (Rreal Studio image maker or Kenney packs), add sound effects, screen shake and particles." },
+      { title: "Publish", body: "Upload to itch.io or Netlify Drop and share the link. Later, wrap it with Capacitor to submit to Google Play and the App Store." },
     ],
   },
 ];

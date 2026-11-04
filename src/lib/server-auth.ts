@@ -10,11 +10,12 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 export const QUOTAS = {
   coach: { limit: Number(process.env.QUOTA_COACH_PER_DAY ?? 40), period: "day" },
   sandbox: { limit: Number(process.env.QUOTA_SANDBOX_PER_DAY ?? 25), period: "day" },
-  course: { limit: Number(process.env.QUOTA_COURSES_PER_DAY ?? 5), period: "day" }, // abuse guard; each course also costs a $9.99 credit
+  course: { limit: Number(process.env.QUOTA_COURSES_PER_DAY ?? 5), period: "day" }, // abuse guard; each course also costs a $9.99 credit unless the member brings their own AI account
   playbook: { limit: Number(process.env.QUOTA_PLAYBOOKS_PER_MONTH ?? 5), period: "month" },
   video: { limit: Number(process.env.QUOTA_VIDEOS_PER_MONTH ?? 1), period: "month" },
   tts: { limit: Number(process.env.QUOTA_TTS_PER_DAY ?? 60), period: "day" },
   translate: { limit: Number(process.env.QUOTA_TRANSLATE_PER_DAY ?? 200), period: "day" },
+  image: { limit: Number(process.env.QUOTA_IMAGES_PER_DAY ?? 10), period: "day" },
   social: { limit: Number(process.env.QUOTA_SOCIAL_POSTS_PER_DAY ?? 10), period: "day" },
 } as const;
 export type QuotaKind = keyof typeof QUOTAS;

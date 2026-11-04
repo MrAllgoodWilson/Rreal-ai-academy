@@ -6,6 +6,8 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { A11ySettings } from "@/components/A11yPanel";
 import { VoicePicker } from "@/components/VoicePicker";
+import { AiAccounts } from "@/components/AiAccounts";
+import { NudgePrefs } from "@/components/NudgePrefs";
 import { useI18n } from "@/lib/i18n";
 import { FormAlert } from "@/components/AuthCard";
 import { useAcademy } from "@/lib/store";
@@ -77,6 +79,16 @@ function Settings() {
             ))}
           </div>
           <VoicePicker />
+        </section>
+
+        <section id="ai-accounts" className="card space-y-4 lg:col-span-2" aria-labelledby="byok-h">
+          <h2 id="byok-h" className="font-display text-xl font-semibold">Your AI accounts</h2>
+          <AiAccounts />
+        </section>
+
+        <section className="card space-y-4" aria-labelledby="nudge-h">
+          <h2 id="nudge-h" className="font-display text-xl font-semibold">Friendly reminders</h2>
+          <NudgePrefs />
         </section>
 
         <section className="card" aria-labelledby="a11y-h">
