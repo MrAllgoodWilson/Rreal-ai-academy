@@ -55,6 +55,13 @@ export const CLOUD_VOICES: CloudVoice[] = [
 export const DEFAULT_CLOUD_VOICE: Record<"en" | "es", string> = { en: "cf:en:asteria", es: "cf:es:celeste" };
 export const cloudVoiceById = (id: string | undefined | null) => CLOUD_VOICES.find((v) => v.id === id);
 
+/** Resolve an explicit or session-pinned device voice without replacing it if unavailable. */
+export function resolveDeviceVoice<T extends { name: string; lang: string }>(voices: T[], lang: "en" | "es", selected = ""): T | undefined {
+  const matching = voices.filter((v) => v.lang.toLowerCase().startsWith(lang));
+  if (selected) return matching.find((v) => v.name === selected);
+  return matching.find((v) => /(natural|neural|samantha|google|aria|jenny|paulina|monica)/i.test(v.name)) ?? matching[0];
+}
+
 export const DEFAULT_PREMIUM_VOICE = PREMIUM_VOICES[0].id;
 export const isPremiumVoice = (id: string | undefined | null) => !!id && PREMIUM_VOICES.some((v) => v.id === id);
 

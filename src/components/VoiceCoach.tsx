@@ -10,6 +10,7 @@ import type { CoachMode } from "@/lib/coach-offline";
 import { SPEECH_LANG, useI18n } from "@/lib/i18n";
 import { VoicePicker } from "@/components/VoicePicker";
 import { apiHeaders } from "@/lib/byok";
+import { resolveDeviceVoice } from "@/lib/voices";
 
 /* Minimal typings for the Web Speech API (not in TS DOM lib everywhere) */
 type SpeechRecognitionLike = {
@@ -105,6 +106,10 @@ export function VoiceCoach({ lessonId }: { lessonId?: string }) {
   const [caption, setCaption] = useState("");
   const [supported, setSupported] = useState(true);
   const [engine, setEngine] = useState<"live" | "offline" | null>(null);
+  const [voiceNotice, setVoiceNotice] = useState("");
+  const retryText = useRef("");
+  const voiceRequest = useRef(0);
+  const devicePin = useRef<{ key: string; name: string } | null>(null);
   const pendingQuiz = useRef<string | undefined>(undefined);
   const recog = useRef<SpeechRecognitionLike | null>(null);
   const audioEl = useRef<HTMLAudioElement | null>(null);
@@ -121,6 +126,7 @@ export function VoiceCoach({ lessonId }: { lessonId?: string }) {
   }, [messages, busy]);
 
   const stopVoice = useCallback(() => {
+    voiceRequest.current++;
     window.speechSynthesis?.cancel();
     audioEl.current?.pause();
     setSpeaking(false);
@@ -131,12 +137,22 @@ export function VoiceCoach({ lessonId }: { lessonId?: string }) {
     async (text: string) => {
       if (!voiceOn) return;
       stopVoice();
+      const requestId = voiceRequest.current;
+      retryText.current = text;
+      setVoiceNotice("");
       setSpeaking(true);
-      // Premium voice via ElevenLabs if configured, otherwise browser TTS
+      const unavailable = () => {
+        if (requestId !== voiceRequest.current) return;
+        setSpeaking(false);
+        setCaption(text);
+        setVoiceNotice(lang === "es" ? "La voz seleccionada no está disponible. No cambiamos de voz. Puedes leer la respuesta o reintentar." : "Your selected voice is unavailable. We haven't switched voices. Read the reply or retry.");
+      };
+      // Preserve the selected provider. Failures leave the written reply available.
       try {
         const res = prefs.voiceProvider === "premium" ? await fetch("/api/tts", { method: "POST", headers: apiHeaders(), body: JSON.stringify({ text, voiceId: prefs.premiumVoiceId, lang }) }) : null;
         if (res?.ok && res.headers.get("content-type")?.includes("audio")) {
           const url = URL.createObjectURL(await res.blob());
+          if (requestId !== voiceRequest.current) { URL.revokeObjectURL(url); return; }
           const a = new Audio(url);
           audioEl.current = a;
           a.playbackRate = prefs.voiceRate;
@@ -145,24 +161,31 @@ export function VoiceCoach({ lessonId }: { lessonId?: string }) {
             const i = Math.floor((a.currentTime / (a.duration || 1)) * text.length);
             setCaption(text.slice(Math.max(0, text.lastIndexOf(" ", i - 60)), i + 40));
           };
-          a.onended = () => { setSpeaking(false); setCaption(""); URL.revokeObjectURL(url); };
+          a.onended = () => { if (requestId === voiceRequest.current) { setSpeaking(false); setCaption(""); } URL.revokeObjectURL(url); };
+          a.onerror = () => { URL.revokeObjectURL(url); unavailable(); };
           await a.play();
           return;
         }
+        if (prefs.voiceProvider === "premium") { unavailable(); return; }
       } catch {
-        /* fall back */
+        unavailable();
+        return;
       }
-      if (!("speechSynthesis" in window)) { setSpeaking(false); return; }
+      if (requestId !== voiceRequest.current) return;
+      if (!("speechSynthesis" in window)) { unavailable(); return; }
       const u = new SpeechSynthesisUtterance(text.replace(/[•✅]/g, ""));
       u.rate = prefs.voiceRate;
       u.pitch = prefs.voicePitch;
       u.lang = SPEECH_LANG[lang];
-      const all = window.speechSynthesis.getVoices().filter((x) => x.lang.toLowerCase().startsWith(lang));
-      const v = all.find((x) => x.name === prefs.deviceVoiceName) ?? all.find((x) => /(natural|neural|samantha|google|aria|jenny|paulina|monica)/i.test(x.name)) ?? all[0];
-      if (v) u.voice = v;
+      const pinKey = `${lang}:${prefs.deviceVoiceName}`;
+      const selected = prefs.deviceVoiceName || (devicePin.current?.key === pinKey ? devicePin.current.name : "");
+      const v = resolveDeviceVoice(window.speechSynthesis.getVoices(), lang, selected);
+      if (!v) { unavailable(); return; }
+      devicePin.current = { key: pinKey, name: v.name };
+      u.voice = v;
       u.onboundary = (e) => setCaption(text.slice(Math.max(0, text.lastIndexOf(" ", e.charIndex - 60)), e.charIndex + 40));
-      u.onend = () => { setSpeaking(false); setCaption(""); };
-      u.onerror = () => { setSpeaking(false); setCaption(""); };
+      u.onend = () => { if (requestId === voiceRequest.current) { setSpeaking(false); setCaption(""); } };
+      u.onerror = unavailable;
       window.speechSynthesis.speak(u);
     },
     [voiceOn, prefs.voiceRate, prefs.voicePitch, prefs.voiceProvider, prefs.premiumVoiceId, prefs.deviceVoiceName, lang, stopVoice],
@@ -270,6 +293,10 @@ export function VoiceCoach({ lessonId }: { lessonId?: string }) {
             </button>
           </div>
           <Waveform stream={stream} speaking={speaking} />
+          {voiceNotice && <div className="mb-3 rounded-xl border border-line p-3">
+            <p role="status" className="text-sm text-muted">{voiceNotice}</p>
+            <button type="button" className="btn-ghost mt-2 min-h-[44px]" onClick={() => say(retryText.current)}>{lang === "es" ? "Reintentar voz" : "Retry selected voice"}</button>
+          </div>}
           {/* Live captions — synchronized for deaf & hard-of-hearing learners */}
           {prefs.captions && (
             <div className="min-h-[3.5rem] rounded-xl bg-black/85 px-4 py-3 text-center text-lg font-semibold leading-snug text-white" aria-hidden="true">

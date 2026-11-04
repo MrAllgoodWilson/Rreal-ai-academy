@@ -76,7 +76,8 @@ async function toBytes(out: unknown): Promise<Uint8Array | null> {
 
 /**
  * Speech (English + Spanish). With a `speaker` it uses Deepgram Aura-2 (selectable voices, MP3);
- * otherwise, or if Aura fails, MeloTTS. Returns audio bytes (WAV or MP3, sniff the header) or null.
+ * without a selected speaker, use MeloTTS. A selected voice must never silently change engines.
+ * Returns audio bytes (WAV or MP3, sniff the header) or null.
  */
 export async function cfSpeech(text: string, lang: "en" | "es", speaker?: string): Promise<Uint8Array | null> {
   const ai = await getAi();
@@ -86,8 +87,9 @@ export async function cfSpeech(text: string, lang: "en" | "es", speaker?: string
       const bytes = await toBytes(await ai.run(lang === "es" ? "@cf/deepgram/aura-2-es" : "@cf/deepgram/aura-2-en", { text, speaker, encoding: "mp3" }));
       if (bytes && bytes.length > 200) return bytes;
     } catch (e) {
-      console.error("Aura speech error, falling back to MeloTTS", speaker, e);
+      console.error("Selected Aura speech unavailable", speaker, e);
     }
+    return null;
   }
   try {
     const out = await ai.run(CF_TTS_MODEL, { prompt: text, lang });

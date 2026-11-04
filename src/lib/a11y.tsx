@@ -15,7 +15,7 @@ export interface Prefs {
   visualAlerts: boolean;
   voiceRate: number;
   voicePitch: number;
-  /** "premium" = ElevenLabs voice (falls back to device), "device" = browser voice only */
+  /** "premium" = selected cloud/ElevenLabs voice; "device" = selected browser voice. */
   voiceProvider: "premium" | "device";
   premiumVoiceId: string;
   deviceVoiceName: string;

@@ -9,7 +9,7 @@ import { readByok } from "@/lib/byok-server";
 /**
  * Text-to-speech. Included cloud voices ("cf:<lang>:<speaker>") run on Cloudflare Workers AI (Deepgram Aura-2, English + Spanish,
  * no key needed). ElevenLabs voices are used when a key is available (the member's own, or ELEVENLABS_API_KEY).
- * 204 = no premium voice available → the client uses the device voice.
+ * 204 = selected speech unavailable; the Coach keeps text/retry instead of changing voices.
  */
 export async function POST(req: Request) {
   const own = readByok(req).elevenlabs;
