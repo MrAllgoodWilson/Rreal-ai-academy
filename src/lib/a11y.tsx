@@ -34,7 +34,7 @@ export const DEFAULT_PREFS: Prefs = {
   voiceRate: 1,
   voicePitch: 1,
   voiceProvider: "premium",
-  premiumVoiceId: "21m00Tcm4TlvDq8ikWAM",
+  premiumVoiceId: "cf:en:asteria",
   deviceVoiceName: "",
 };
 

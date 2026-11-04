@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Play, Square } from "lucide-react";
 import { useA11y } from "@/lib/a11y";
 import { useI18n } from "@/lib/i18n";
-import { PREMIUM_VOICES, guessGender, type Gender } from "@/lib/voices";
+import { CLOUD_VOICES, PREMIUM_VOICES, guessGender, type Gender } from "@/lib/voices";
+import { getByok } from "@/lib/byok";
 import { apiHeaders } from "@/lib/byok";
 
 const SAMPLE = { en: "Hi! I'm your Rreal Coach. Let's learn something amazing today.", es: "¡Hola! Soy tu Coach Rreal. Aprendamos algo increíble hoy." };
@@ -16,10 +17,12 @@ export function VoicePicker() {
   const [gender, setGender] = useState<Gender | "all">("all");
   const [device, setDevice] = useState<SpeechSynthesisVoice[]>([]);
   const [playing, setPlaying] = useState<string | null>(null);
-  const [cloudVoice, setCloudVoice] = useState(false);
+  const [eleven, setEleven] = useState(false);
 
   useEffect(() => {
-    fetch("/api/health").then((r) => r.json()).then((h: { active?: { voice?: string } }) => setCloudVoice(h.active?.voice === "cloudflare")).catch(() => {});
+    const own = Boolean(getByok().elevenlabs);
+    setEleven(own);
+    fetch("/api/health").then((r) => r.json()).then((h: { integrations?: { elevenlabs?: boolean } }) => setEleven(own || Boolean(h.integrations?.elevenlabs))).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -30,7 +33,7 @@ export function VoicePicker() {
     return () => window.speechSynthesis.removeEventListener("voiceschanged", load);
   }, [lang]);
 
-  const premium = useMemo(() => PREMIUM_VOICES.filter((v) => gender === "all" || v.gender === gender), [gender]);
+  const premium = useMemo(() => [...CLOUD_VOICES.filter((v) => v.lang === lang), ...(eleven ? PREMIUM_VOICES : [])].filter((v) => gender === "all" || v.gender === gender), [gender, lang, eleven]);
   const devices = useMemo(() => device.filter((v) => gender === "all" || guessGender(v.name) === gender), [device, gender]);
 
   const stop = () => {
@@ -73,8 +76,8 @@ export function VoicePicker() {
           </button>
         ))}
       </div>
-      {cloudVoice && prefs.voiceProvider === "premium" && (
-        <p className="text-sm text-muted">{lang === "es" ? "Por ahora todas las voces premium usan nuestra voz en la nube estándar. Pronto llegarán más voces." : "For now, every premium choice uses our standard cloud voice. More voices are coming soon."}</p>
+      {prefs.voiceProvider === "premium" && !eleven && (
+        <p className="text-sm text-muted">{lang === "es" ? "Estas voces están incluidas en tu membresía. Conecta tu cuenta de ElevenLabs en Ajustes para 12 voces más." : "These voices are included with your membership. Connect your ElevenLabs account in Settings → Your AI accounts for 12 more."}</p>
       )}
       <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Voice gender">
         {(["all", "female", "male", "neutral"] as const).map((g) => (

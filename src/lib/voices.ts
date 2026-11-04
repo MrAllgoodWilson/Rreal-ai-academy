@@ -24,6 +24,37 @@ export const PREMIUM_VOICES: PremiumVoice[] = [
   { id: "IKne3meq5aSn9XLyUdCD", name: "Charlie", gender: "male", accent: "Australian", style: "Casual, natural" },
 ];
 
+/**
+ * Included "cloud" voices: Deepgram Aura-2 on Cloudflare Workers AI. No third-party key needed.
+ * id = "cf:<lang>:<speaker>". Genders/accents follow Deepgram's published speaker descriptions; check by ear before marketing them.
+ */
+export interface CloudVoice extends PremiumVoice {
+  lang: "en" | "es";
+  speaker: string;
+}
+const cv = (lang: "en" | "es", speaker: string, name: string, gender: Gender, accent: string, style: string): CloudVoice => ({ id: `cf:${lang}:${speaker}`, lang, speaker, name, gender, accent, style });
+export const CLOUD_VOICES: CloudVoice[] = [
+  cv("en", "asteria", "Asteria", "female", "American", "Clear, confident"),
+  cv("en", "luna", "Luna", "female", "American", "Warm, friendly"),
+  cv("en", "athena", "Athena", "female", "British", "Calm, mature"),
+  cv("en", "hera", "Hera", "female", "American", "Smooth, professional"),
+  cv("en", "orion", "Orion", "male", "American", "Approachable, steady"),
+  cv("en", "arcas", "Arcas", "male", "American", "Natural, smooth"),
+  cv("en", "apollo", "Apollo", "male", "American", "Confident, casual"),
+  cv("en", "zeus", "Zeus", "male", "American", "Deep, trustworthy"),
+  cv("es", "celeste", "Celeste", "female", "Colombian", "Clear, friendly"),
+  cv("es", "estrella", "Estrella", "female", "Mexican", "Warm, upbeat"),
+  cv("es", "selena", "Selena", "female", "Latin American", "Smooth, expressive"),
+  cv("es", "carina", "Carina", "female", "Peninsular", "Professional, calm"),
+  cv("es", "diana", "Diana", "female", "Peninsular", "Confident, engaging"),
+  cv("es", "sirio", "Sirio", "male", "Mexican", "Friendly, steady"),
+  cv("es", "javier", "Javier", "male", "Mexican", "Warm, natural"),
+  cv("es", "nestor", "Néstor", "male", "Peninsular", "Calm, professional"),
+  cv("es", "alvaro", "Álvaro", "male", "Peninsular", "Clear, authoritative"),
+];
+export const DEFAULT_CLOUD_VOICE: Record<"en" | "es", string> = { en: "cf:en:asteria", es: "cf:es:celeste" };
+export const cloudVoiceById = (id: string | undefined | null) => CLOUD_VOICES.find((v) => v.id === id);
+
 export const DEFAULT_PREMIUM_VOICE = PREMIUM_VOICES[0].id;
 export const isPremiumVoice = (id: string | undefined | null) => !!id && PREMIUM_VOICES.some((v) => v.id === id);
 

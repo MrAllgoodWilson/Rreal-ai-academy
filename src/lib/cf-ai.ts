@@ -65,10 +65,30 @@ export async function cfText(opts: { system: string; messages: Msg[]; maxTokens?
   }
 }
 
-/** MeloTTS speech (English + Spanish). Returns audio bytes (WAV or MP3, sniff the header) or null. */
-export async function cfSpeech(text: string, lang: "en" | "es"): Promise<Uint8Array | null> {
+async function toBytes(out: unknown): Promise<Uint8Array | null> {
+  if (out instanceof Uint8Array) return out;
+  if (out instanceof ArrayBuffer) return new Uint8Array(out);
+  if (out instanceof ReadableStream) return new Uint8Array(await new Response(out).arrayBuffer());
+  const audio = (out as { audio?: string } | null)?.audio;
+  if (typeof audio === "string") return Uint8Array.from(atob(audio), (c) => c.charCodeAt(0));
+  return null;
+}
+
+/**
+ * Speech (English + Spanish). With a `speaker` it uses Deepgram Aura-2 (selectable voices, MP3);
+ * otherwise, or if Aura fails, MeloTTS. Returns audio bytes (WAV or MP3, sniff the header) or null.
+ */
+export async function cfSpeech(text: string, lang: "en" | "es", speaker?: string): Promise<Uint8Array | null> {
   const ai = await getAi();
   if (!ai) return null;
+  if (speaker) {
+    try {
+      const bytes = await toBytes(await ai.run(lang === "es" ? "@cf/deepgram/aura-2-es" : "@cf/deepgram/aura-2-en", { text, speaker, encoding: "mp3" }));
+      if (bytes && bytes.length > 200) return bytes;
+    } catch (e) {
+      console.error("Aura speech error, falling back to MeloTTS", speaker, e);
+    }
+  }
   try {
     const out = await ai.run(CF_TTS_MODEL, { prompt: text, lang });
     if (out instanceof Uint8Array) return out;
