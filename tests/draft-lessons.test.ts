@@ -16,23 +16,26 @@ const lesson = {
   ],
 };
 
-async function runDraft(respond: (res: ServerResponse) => void) {
+async function runDraft(respond: (res: ServerResponse) => void, args: string[] = []) {
   const dir = await mkdtemp(path.join(tmpdir(), "rreal-draft-test-"));
+  let requestBody: Record<string, unknown> | null = null;
   const server = createServer(async (req, res) => {
-    for await (const chunk of req) void chunk;
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    requestBody = JSON.parse(Buffer.concat(chunks).toString("utf8"));
     respond(res);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Missing test port");
   try {
-    const child = spawn(process.execPath, [script, "--course", "Test", "--topics", "Test topic"], {
+    const child = spawn(process.execPath, [script, "--course", "Test", "--topics", "Test topic", ...args], {
       cwd: dir, env: { ...process.env, OLLAMA_URL: `http://127.0.0.1:${address.port}` }, stdio: "ignore",
     });
     const code = await new Promise<number | null>((resolve, reject) => { child.on("exit", resolve); child.on("error", reject); });
     const files = await readdir(path.join(dir, "drafts")).catch(() => [] as string[]);
     const draft = files.length ? JSON.parse(await readFile(path.join(dir, "drafts", files[0]), "utf8")) : null;
-    return { code, files, draft };
+    return { code, files, draft, requestBody };
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await rm(dir, { recursive: true, force: true });
@@ -46,10 +49,11 @@ describe("local lesson drafting transport", () => {
       const record = JSON.stringify({ message: { content: JSON.stringify(lesson) } });
       res.write(record.slice(0, 25));
       setTimeout(() => res.end(record.slice(25)), 20);
-    }, 50));
+    }, 50), ["--threads", "2", "--context", "2048", "--max-tokens", "1500", "--keep-alive", "0"]);
     expect(result.code).toBe(0);
     expect(result.draft.lessons[0].lesson).toEqual(lesson);
     expect(result.draft.lessons[0].needsReview).toBe(true);
+    expect(result.requestBody).toMatchObject({ options: { num_thread: 2, num_ctx: 2048, num_predict: 1500 }, keep_alive: "0" });
   });
 
   it("does not report a streamed runner error as a successful draft", async () => {

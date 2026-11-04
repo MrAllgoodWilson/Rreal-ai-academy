@@ -19,6 +19,18 @@ const topics = (arg("topics") || "").split(";").map((s) => s.trim()).filter(Bool
 const model = arg("model", "llama3.1:8b");
 const base = process.env.OLLAMA_URL || "http://localhost:11434";
 if (!course || !topics.length) { console.error('Usage: --course "<name>" --topics "Topic A;Topic B"'); process.exit(1); }
+const options = { temperature: 0.4 };
+for (const [flag, key] of [["threads", "num_thread"], ["context", "num_ctx"], ["max-tokens", "num_predict"]]) {
+  const raw = arg(flag);
+  if (raw === undefined) continue;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1 || value > 32768) {
+    console.error(`--${flag} must be an integer between 1 and 32768`);
+    process.exit(1);
+  }
+  options[key] = value;
+}
+const keepAlive = arg("keep-alive");
 
 const SYSTEM = `You write lessons for Rreal AI Academy (beginner-friendly, accurate, plain language, no hype, never invent statistics).
 Return ONLY JSON: {"title": string, "minutes": number (6-15), "summary": string (<=90 chars),
@@ -45,7 +57,7 @@ function chat(body) {
 }
 for (const topic of topics) {
   process.stdout.write(`Drafting "${topic}" with ${model}… `);
-  const res = await chat({ model, stream: true, format: "json", options: { temperature: 0.4 }, messages: [{ role: "system", content: SYSTEM }, { role: "user", content: `Course: ${course}\nLesson topic: ${topic}` }] });
+  const res = await chat({ model, stream: true, format: "json", options, ...(keepAlive !== undefined ? { keep_alive: keepAlive } : {}), messages: [{ role: "system", content: SYSTEM }, { role: "user", content: `Course: ${course}\nLesson topic: ${topic}` }] });
   if (!res.ok || !res.body) {
     res.body?.resume();
     throw new Error(`Ollama request failed (${res.status}); no draft saved for this topic.`);
