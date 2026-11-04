@@ -3,14 +3,16 @@ import { z } from "zod";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { DEFAULT_PREMIUM_VOICE, isPremiumVoice } from "@/lib/voices";
 import { getMember, takeQuota } from "@/lib/server-auth";
+import { cfAiAvailable, cfSpeech } from "@/lib/cf-ai";
 
 /**
- * Premium text-to-speech via ElevenLabs (multilingual model: English + Spanish).
+ * Premium text-to-speech: ElevenLabs (multilingual, selectable voices) when ELEVENLABS_API_KEY is set,
+ * otherwise Cloudflare Workers AI MeloTTS (English + Spanish, no key needed).
  * 204 = no premium voice available → the client uses the device voice.
  */
 export async function POST(req: Request) {
   const key = process.env.ELEVENLABS_API_KEY;
-  if (!key) return new NextResponse(null, { status: 204 });
+  if (!key && !(await cfAiAvailable())) return new NextResponse(null, { status: 204 });
   if (!rateLimit(`tts:${clientIp(req)}`, 30, 60_000).ok) return new NextResponse(null, { status: 204 });
   const parsed = z.object({ text: z.string().min(1).max(1500), voiceId: z.string().max(64).optional(), lang: z.enum(["en", "es"]).optional() }).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return new NextResponse(null, { status: 204 });
@@ -18,6 +20,12 @@ export async function POST(req: Request) {
   const who = await getMember({ requireSubscription: true });
   if ("error" in who) return new NextResponse(null, { status: 204 });
   if (!who.demo && (await takeQuota(who.member, "tts"))) return new NextResponse(null, { status: 204 });
+
+  if (!key) {
+    const mp3 = await cfSpeech(parsed.data.text, parsed.data.lang ?? "en");
+    if (!mp3) return new NextResponse(null, { status: 204 });
+    return new NextResponse(mp3 as BodyInit, { headers: { "content-type": "audio/mpeg", "cache-control": "no-store" } });
+  }
 
   const custom = process.env.ELEVENLABS_VOICE_ID;
   const requested = parsed.data.voiceId;

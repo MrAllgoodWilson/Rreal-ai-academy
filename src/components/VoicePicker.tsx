@@ -15,6 +15,11 @@ export function VoicePicker() {
   const [gender, setGender] = useState<Gender | "all">("all");
   const [device, setDevice] = useState<SpeechSynthesisVoice[]>([]);
   const [playing, setPlaying] = useState<string | null>(null);
+  const [cloudVoice, setCloudVoice] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/health").then((r) => r.json()).then((h: { active?: { voice?: string } }) => setCloudVoice(h.active?.voice === "cloudflare")).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!("speechSynthesis" in window)) return;
@@ -67,6 +72,9 @@ export function VoicePicker() {
           </button>
         ))}
       </div>
+      {cloudVoice && prefs.voiceProvider === "premium" && (
+        <p className="text-sm text-muted">{lang === "es" ? "Por ahora todas las voces premium usan nuestra voz en la nube estándar. Pronto llegarán más voces." : "For now, every premium choice uses our standard cloud voice. More voices are coming soon."}</p>
+      )}
       <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Voice gender">
         {(["all", "female", "male", "neutral"] as const).map((g) => (
           <button key={g} type="button" role="radio" aria-checked={gender === g} onClick={() => setGender(g)} className={`chip min-h-[36px] px-3 capitalize ${gender === g ? "border-violet text-ink" : ""}`}>

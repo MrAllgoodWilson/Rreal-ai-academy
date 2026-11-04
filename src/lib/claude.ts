@@ -1,9 +1,12 @@
 import "server-only";
+import { cfText } from "@/lib/cf-ai";
 
-/** Minimal Claude Messages API client (server-only). Returns null when no key is configured. */
+/**
+ * Text generation (server-only). Order: Claude API (ANTHROPIC_API_KEY) → Cloudflare Workers AI binding → null (offline fallback).
+ */
 export async function callClaude(opts: { system: string; messages: { role: "user" | "assistant"; content: string }[]; maxTokens?: number }): Promise<string | null> {
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return null;
+  if (!key) return cfText(opts);
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
@@ -16,7 +19,7 @@ export async function callClaude(opts: { system: string; messages: { role: "user
   });
   if (!res.ok) {
     console.error("Claude API error", res.status, await res.text().catch(() => ""));
-    return null;
+    return cfText(opts);
   }
   const json = (await res.json()) as { content?: { type: string; text?: string }[] };
   return json.content?.filter((c) => c.type === "text").map((c) => c.text).join("\n").trim() || null;
