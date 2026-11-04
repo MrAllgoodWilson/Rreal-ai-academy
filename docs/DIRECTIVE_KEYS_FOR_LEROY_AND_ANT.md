@@ -32,5 +32,5 @@ Each one replaces the Cloudflare version automatically once its key is uploaded:
 Alternative to an Anthropic account: in the Cloudflare dashboard, **AI → AI Gateway → load credits (Unified Billing)**, then tell Claude. Claude switches the app to real Claude with no Anthropic key.
 
 ## Done when
-- [ ] `/api/health` shows `"email":"cloudflare"` and a "Forgot password" email arrives
+- [ ] A "Forgot password" email sent from the site arrives (the health check shows `"email":"cloudflare"` already; that only means the app is wired, not that the domain is onboarded)
 - [ ] Old exposed keys are revoked
