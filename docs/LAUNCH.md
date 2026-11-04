@@ -74,3 +74,12 @@ Enable the **Customer portal** (Settings → Billing) and put its login link in 
 ## Costs to watch at $1/month
 Stripe takes ~2.9% + $0.30 per charge, so you keep about **$0.67** of each $1. AI calls cost real money, so fair-use limits are built in
 (env `QUOTA_*`). Video rendering is the most expensive feature (often tens of cents per clip) — the default is 1 render/month per member.
+
+## Pending deploy: account deletion + working "cancel membership" (added 2026-11-04)
+Code is on branch `feature/v0.2-launch` (commit 560e685): Settings → Delete my account, `/api/account/delete`, new Privacy page.
+**Cancel path:** the app's "Manage billing / cancel" button needs `NEXT_PUBLIC_STRIPE_PORTAL_URL` (a build-time public variable). Stripe already has an active no-code customer portal
+(cancellation at period end, invoices, card update) with this public login link: `https://billing.stripe.com/p/login/aFacN65EF1IQ2xs09CcQU00`.
+Add this line to the public values `~/rreal-deploy.sh` writes into `.env.production`, then redeploy:
+`NEXT_PUBLIC_STRIPE_PORTAL_URL=https://billing.stripe.com/p/login/aFacN65EF1IQ2xs09CcQU00`
+Verify: signed-in member with a membership → Settings → Manage billing / cancel opens the Stripe login page; a member with no membership sees no billing button.
+Note: the portal is account-wide (TiQology Holdings LLC); members sign in with their email and get a one-time code.
