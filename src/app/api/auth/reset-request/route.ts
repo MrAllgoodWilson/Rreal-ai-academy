@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { emailLayout, sendEmail } from "@/lib/email";
+import { emailConfigured, emailLayout, sendEmail } from "@/lib/email";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 /**
  * Password reset that doesn't depend on Supabase's mailer or redirect allow-list:
- * generates a one-time recovery token and emails OUR link (/reset-password?token_hash=…) via Resend.
+ * generates a one-time recovery token and emails OUR link (/reset-password?token_hash=…) via Resend or Cloudflare Email.
+ * If our sender fails (e.g. the domain isn't onboarded yet), known accounts fall back to Supabase's built-in recovery email.
  * Responds identically whether or not the email exists. 501 → client falls back to Supabase's built-in email.
  */
 export async function POST(req: Request) {
   const generic = NextResponse.json({ ok: true, message: "If an account exists for that email, a reset link is on its way. It expires in 1 hour." });
-  if (!process.env.RESEND_API_KEY) return NextResponse.json({ fallback: true }, { status: 501 });
+  if (!(await emailConfigured())) return NextResponse.json({ fallback: true }, { status: 501 });
   const admin = getSupabaseAdmin();
   if (!admin) return NextResponse.json({ fallback: true }, { status: 501 });
   if (!rateLimit(`reset:${clientIp(req)}`, 5, 15 * 60_000).ok) return generic;
@@ -23,10 +24,12 @@ export async function POST(req: Request) {
   if (error || !data?.properties?.hashed_token) return generic; // unknown email → same response
   const site = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin;
   const link = `${site}/reset-password?token_hash=${encodeURIComponent(data.properties.hashed_token)}&type=recovery`;
-  await sendEmail(
+  const sent = await sendEmail(
     parsed.data.email,
     "Reset your Rreal AI Academy password",
     emailLayout("Reset your password", `<p>Click the button below to choose a new password. This link expires in 1 hour and can be used once.</p><p><a href="${link}" style="display:inline-block;background:#22d3ee;color:#070912;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:bold">Choose a new password</a></p>`),
   );
+  // Same response either way (no account enumeration); just make sure a known account still gets *some* email.
+  if (!sent) await admin.auth.resetPasswordForEmail(parsed.data.email, { redirectTo: `${site}/reset-password` }).catch(() => null);
   return generic;
 }

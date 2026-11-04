@@ -15,6 +15,11 @@ async function cloudflareEmail(): Promise<EmailBinding | null> {
   }
 }
 
+/** True when some sender is wired up: Resend key or the Cloudflare Email binding. */
+export async function emailConfigured() {
+  return Boolean(process.env.RESEND_API_KEY) || Boolean(await cloudflareEmail());
+}
+
 function parseFrom(from: string) {
   const m = from.match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
   return m ? { name: m[1] || undefined, email: m[2] } : { email: from.trim() };
