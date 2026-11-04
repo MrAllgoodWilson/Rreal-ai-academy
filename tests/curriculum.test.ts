@@ -20,17 +20,25 @@ describe("curriculum integrity", () => {
 });
 
 describe("reviewed weekly course extension", () => {
-  const ids = ["dum-w2-clear-prompts", "dum-w3-check-answers", "dum-w4-private-data"];
-  const course = ALL_TRACKS.find((t) => t.id === "c-ai-dummies")!;
-  it("preserves existing lesson IDs in the original first-week module", () => {
-    expect(course.weeks[0].number).toBe(1);
-    expect(course.weeks[0].modules[0].id).toBe("c-ai-dummies-m1");
-    expect(course.weeks[0].modules[0].lessons.map((l) => l.id)).toEqual(["dum-sign-up", "dum-everyday", "dum-safety"]);
-    expect(course.weeks.slice(1).map((w) => w.number)).toEqual([2, 3, 4]);
+  const cases = [
+    { id: "c-ai-dummies", prefix: "dum-w", old: ["dum-sign-up", "dum-everyday", "dum-safety"] },
+    { id: "c-small-business", prefix: "sb-w", old: ["sb-marketing", "sb-service", "sb-admin"] },
+    { id: "c-faceless-video", prefix: "fv-w", old: ["fv-niche", "fv-produce", "fv-grow"] },
+  ];
+  const extensions = cases.flatMap((c) => lessonsForTrack(c.id).filter((r) => r.lesson.id.startsWith(c.prefix)));
+  it("preserves each original module and provides ten lessons across eight weeks", () => {
+    for (const c of cases) {
+      const course = ALL_TRACKS.find((t) => t.id === c.id)!;
+      expect(course.weeks[0].modules[0].id).toBe(`${c.id}-m1`);
+      expect(course.weeks[0].modules[0].lessons.map((l) => l.id)).toEqual(c.old);
+      expect(course.weeks.map((w) => w.number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+      expect(lessonsForTrack(c.id)).toHaveLength(10);
+      for (const w of course.weeks.slice(1)) expect(w.modules.flatMap((m) => m.lessons)).toHaveLength(1);
+    }
   });
   it("each new lesson has one four-option quiz and one prompt lab in 4–6 blocks", () => {
-    for (const id of ids) {
-      const lesson = ALL_LESSONS.find((r) => r.lesson.id === id)!.lesson;
+    expect(extensions).toHaveLength(21);
+    for (const { lesson } of extensions) {
       expect(lesson.blocks.length).toBeGreaterThanOrEqual(4);
       expect(lesson.blocks.length).toBeLessThanOrEqual(6);
       const quizzes = lesson.blocks.filter((b) => b.type === "quiz");
@@ -46,10 +54,34 @@ describe("reviewed weekly course extension", () => {
   });
   it("enforces the seven-day boundary for the new standalone week", () => {
     const start = Date.UTC(2026, 10, 4);
-    const completed = Object.fromEntries(["dum-sign-up", "dum-everyday", "dum-safety"].map((id) => [id, { at: new Date(start).toISOString() }]));
-    expect(lockReason(ids[0], completed, { subscribed: true, now: start + 7 * 86_400_000 - 1 })).toBe("scheduled");
-    expect(lockReason(ids[0], completed, { subscribed: true, now: start + 7 * 86_400_000 })).toBeNull();
-    expect(lockReason(ids[0], completed, { subscribed: false, now: start + 8 * 86_400_000 })).toBe("subscription");
+    for (const c of cases) {
+      const completed = Object.fromEntries(c.old.map((id) => [id, { at: new Date(start).toISOString() }]));
+      const next = lessonsForTrack(c.id).find((r) => r.week.number === 2)!.lesson.id;
+      expect(lockReason(next, completed, { subscribed: true, now: start + 7 * 86_400_000 - 1 })).toBe("scheduled");
+      expect(lockReason(next, completed, { subscribed: true, now: start + 7 * 86_400_000 })).toBeNull();
+      expect(lockReason(next, completed, { subscribed: false, now: start + 8 * 86_400_000 })).toBe("subscription");
+    }
+  });
+  it("keeps the final week closed until day 49 and still requires the preceding lesson", () => {
+    const start = Date.UTC(2026, 10, 4);
+    for (const c of cases) {
+      const refs = lessonsForTrack(c.id);
+      const completed = Object.fromEntries(refs.filter((r) => r.week.number < 8).map((r) => [r.lesson.id, { at: new Date(start).toISOString() }]));
+      const last = refs.find((r) => r.week.number === 8)!.lesson.id;
+      expect(lockReason(last, completed, { subscribed: true, now: start + 49 * 86_400_000 - 1 })).toBe("scheduled");
+      expect(lockReason(last, completed, { subscribed: true, now: start + 49 * 86_400_000 })).toBeNull();
+      delete completed[refs.find((r) => r.week.number === 7)!.lesson.id];
+      expect(lockReason(last, completed, { subscribed: true, now: start + 49 * 86_400_000 })).toBe("prerequisite");
+    }
+  });
+  it("includes bounded iFilms tips in all new video lessons", () => {
+    const video = extensions.filter((r) => r.track.id === "c-faceless-video");
+    expect(video).toHaveLength(7);
+    for (const { lesson } of video) {
+      const tips = lesson.blocks.filter((b) => b.type === "tip");
+      expect(tips.some((b) => b.type === "tip" && b.body.includes("https://ifilmsstudio.pics"))).toBe(true);
+      expect(tips.some((b) => b.type === "tip" && b.body.includes("keep your cut"))).toBe(false);
+    }
   });
 });
 
