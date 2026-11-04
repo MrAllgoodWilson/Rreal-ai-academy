@@ -39,17 +39,15 @@ export default function SponsorsPage() {
         Sponsors keep the price at $1 and put their brand in front of motivated people who are building real projects.
       </p>
 
-      <ul className="mt-8 grid gap-4 sm:grid-cols-2" role="radiogroup" aria-label="Sponsorship type">
+      <div className="mt-8 grid gap-4 sm:grid-cols-2" role="radiogroup" aria-label="Sponsorship type">
         {TIERS.map(({ id, icon: Icon, name, desc }) => (
-          <li key={id}>
-            <button type="button" role="radio" aria-checked={tier === id} onClick={() => setTier(id)} className={`card h-full w-full text-left transition-colors ${tier === id ? "border-neon" : "hover:border-violet"}`}>
+          <button key={id} type="button" role="radio" aria-checked={tier === id} onClick={() => setTier(id)} className={`card h-full w-full text-left transition-colors ${tier === id ? "border-neon" : "hover:border-violet"}`}>
               <Icon className="h-6 w-6 text-neon" aria-hidden="true" />
               <h2 className="mt-3 font-display text-xl font-semibold">{name}</h2>
               <p className="mt-1 text-sm text-muted">{desc}</p>
-            </button>
-          </li>
+          </button>
         ))}
-      </ul>
+      </div>
 
       <section className="card mt-8" aria-labelledby="sp-form">
         <h2 id="sp-form" className="font-display text-2xl font-semibold">Start a conversation</h2>

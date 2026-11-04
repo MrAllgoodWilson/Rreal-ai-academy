@@ -7,6 +7,7 @@
  *   node scripts/draft-lessons.mjs --course "AI Voice, Podcasts & Music" --topics "Mixing basics;Release checklist" [--model llama3.1:8b]
  *
  * Env: OLLAMA_URL (default http://localhost:11434). Writes drafts/<slug>-<timestamp>.json
+ * On Blackie's CPU an 8B model takes several minutes per lesson: run it overnight for big batches.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 
@@ -30,10 +31,23 @@ for (const topic of topics) {
   const res = await fetch(`${base}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model, stream: false, format: "json", options: { temperature: 0.4 }, messages: [{ role: "system", content: SYSTEM }, { role: "user", content: `Course: ${course}\nLesson topic: ${topic}` }] }),
+    body: JSON.stringify({ model, stream: true, format: "json", options: { temperature: 0.4 }, messages: [{ role: "system", content: SYSTEM }, { role: "user", content: `Course: ${course}\nLesson topic: ${topic}` }] }),
   });
-  if (!res.ok) { console.log(`failed (${res.status})`); continue; }
-  const j = await res.json();
+  if (!res.ok || !res.body) { console.log(`failed (${res.status})`); continue; }
+  // Stream tokens so slow CPU generation never hits fetch's header timeout.
+  let content = "";
+  let buf = "";
+  const dec = new TextDecoder();
+  for await (const chunk of res.body) {
+    buf += dec.decode(chunk, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (line) content += JSON.parse(line).message?.content ?? "";
+    }
+  }
+  const j = { message: { content } };
   try {
     const lesson = JSON.parse(j.message?.content ?? "");
     const ok = Array.isArray(lesson.blocks) && lesson.blocks.some((b) => b.type === "quiz") && lesson.title;
