@@ -8,6 +8,7 @@ import { A11ySettings } from "@/components/A11yPanel";
 import { VoicePicker } from "@/components/VoicePicker";
 import { AiAccounts } from "@/components/AiAccounts";
 import { NudgePrefs } from "@/components/NudgePrefs";
+import { DeleteAccount } from "@/components/DeleteAccount";
 import { useI18n } from "@/lib/i18n";
 import { FormAlert } from "@/components/AuthCard";
 import { useAcademy } from "@/lib/store";
@@ -112,6 +113,7 @@ function Settings() {
             <button type="button" className="btn-ghost" onClick={exportData}>Export my data (JSON)</button>
             {demo && <button type="button" className="btn-ghost text-danger" onClick={() => { if (confirm("Reset all progress? This can't be undone.")) resetProgress(); }}>Reset progress</button>}
           </div>
+          {!demo && <DeleteAccount />}
         </section>
       </div>
     </div>
