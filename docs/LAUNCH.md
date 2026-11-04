@@ -12,7 +12,11 @@ Total time: about 20–30 minutes. Hosting: **Cloudflare Workers**.
 | Cloudflare Worker `rreal-ai-academy` (Workers Paid) | ✅ deployed, connected to Supabase |
 | Secrets: `CERT_SIGNING_SECRET`, `ADMIN_EMAILS`, `STRIPE_WEBHOOK_SECRET` | ✅ set |
 | Stripe $1/month price, payment link (redirects back to the site), live webhook `we_1UXpIWK68Pw0CGHvolRNKn5E` | ✅ |
-| `SUPABASE_SERVICE_ROLE_KEY` + AI/voice/video/social/email keys | ⏳ owner fills `~/rreal-secrets.env`, then runs `~/rreal-upload-keys.sh` |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ set |
+| **AI without keys:** Coach, Sandbox, course + playbook builder, Spanish translation run on **Cloudflare Workers AI** (`AI` binding, Llama 3.3 70B) | ✅ live, tested 2026-11-04 |
+| **Voice without keys:** Cloudflare MeloTTS (English + Spanish) | ✅ live, tested |
+| **Email without keys:** Cloudflare Email Service (`EMAIL` binding, from `support@rrealaiacademy.app`) | ⏳ owner: dashboard → Compute → Email Service → Email Sending → Onboard Domain → `rrealaiacademy.app` |
+| Optional upgrades: `ANTHROPIC_API_KEY` (real Claude), `ELEVENLABS_API_KEY` (12 voices), `REPLICATE_API_TOKEN` (video), `AYRSHARE_*` (social posting), `RESEND_API_KEY` | optional — fill `~/rreal-secrets.env`, run `~/rreal-upload-keys.sh`. Each key overrides the Cloudflare fallback. |
 | Supabase Auth URL configuration + custom SMTP | ⏳ owner (dashboard only) |
 | GitHub → Cloudflare auto-deploy (Workers Builds) | optional — redeploy any time with `~/rreal-deploy.sh https://rrealaiacademy.app` |
 

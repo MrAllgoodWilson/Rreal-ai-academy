@@ -65,7 +65,7 @@ export async function cfText(opts: { system: string; messages: Msg[]; maxTokens?
   }
 }
 
-/** MeloTTS speech (English + Spanish). Returns MP3 bytes or null. */
+/** MeloTTS speech (English + Spanish). Returns audio bytes (WAV or MP3, sniff the header) or null. */
 export async function cfSpeech(text: string, lang: "en" | "es"): Promise<Uint8Array | null> {
   const ai = await getAi();
   if (!ai) return null;

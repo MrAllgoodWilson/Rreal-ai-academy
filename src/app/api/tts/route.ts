@@ -22,9 +22,10 @@ export async function POST(req: Request) {
   if (!who.demo && (await takeQuota(who.member, "tts"))) return new NextResponse(null, { status: 204 });
 
   if (!key) {
-    const mp3 = await cfSpeech(parsed.data.text, parsed.data.lang ?? "en");
-    if (!mp3) return new NextResponse(null, { status: 204 });
-    return new NextResponse(mp3 as BodyInit, { headers: { "content-type": "audio/mpeg", "cache-control": "no-store" } });
+    const audio = await cfSpeech(parsed.data.text, parsed.data.lang ?? "en");
+    if (!audio) return new NextResponse(null, { status: 204 });
+    const wav = audio[0] === 0x52 && audio[1] === 0x49 && audio[2] === 0x46 && audio[3] === 0x46; // "RIFF"
+    return new NextResponse(audio as BodyInit, { headers: { "content-type": wav ? "audio/wav" : "audio/mpeg", "cache-control": "no-store" } });
   }
 
   const custom = process.env.ELEVENLABS_VOICE_ID;
