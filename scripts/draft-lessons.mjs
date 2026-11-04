@@ -10,6 +10,8 @@
  * On Blackie's CPU an 8B model takes several minutes per lesson: run it overnight for big batches.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d; };
 const course = arg("course");
@@ -26,14 +28,28 @@ Return ONLY JSON: {"title": string, "minutes": number (6-15), "summary": string 
 
 const slug = course.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const out = [];
+// An unloaded CPU model may take longer than fetch's default header timeout to start.
+// Native HTTP avoids that fixed header limit; a 30-minute idle timeout still bounds stalls.
+function chat(body) {
+  const url = new URL(`${base.replace(/\/$/, "")}/api/chat`);
+  const request = url.protocol === "https:" ? httpsRequest : httpRequest;
+  const payload = JSON.stringify(body);
+  return new Promise((resolve, reject) => {
+    const req = request(url, { method: "POST", headers: { "content-type": "application/json", "content-length": Buffer.byteLength(payload) } }, (res) => {
+      resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode, body: res });
+    });
+    req.setTimeout(30 * 60_000, () => req.destroy(new Error("Ollama was idle for 30 minutes; retry after checking model memory.")));
+    req.on("error", reject);
+    req.end(payload);
+  });
+}
 for (const topic of topics) {
   process.stdout.write(`Drafting "${topic}" with ${model}… `);
-  const res = await fetch(`${base}/api/chat`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model, stream: true, format: "json", options: { temperature: 0.4 }, messages: [{ role: "system", content: SYSTEM }, { role: "user", content: `Course: ${course}\nLesson topic: ${topic}` }] }),
-  });
-  if (!res.ok || !res.body) { console.log(`failed (${res.status})`); continue; }
+  const res = await chat({ model, stream: true, format: "json", options: { temperature: 0.4 }, messages: [{ role: "system", content: SYSTEM }, { role: "user", content: `Course: ${course}\nLesson topic: ${topic}` }] });
+  if (!res.ok || !res.body) {
+    res.body?.resume();
+    throw new Error(`Ollama request failed (${res.status}); no draft saved for this topic.`);
+  }
   // Stream tokens so slow CPU generation never hits fetch's header timeout.
   let content = "";
   let buf = "";
@@ -44,8 +60,18 @@ for (const topic of topics) {
     while ((nl = buf.indexOf("\n")) >= 0) {
       const line = buf.slice(0, nl).trim();
       buf = buf.slice(nl + 1);
-      if (line) content += JSON.parse(line).message?.content ?? "";
+      if (line) {
+        const part = JSON.parse(line);
+        if (part.error) throw new Error(`Ollama: ${part.error}`);
+        content += part.message?.content ?? "";
+      }
     }
+  }
+  buf += dec.decode();
+  if (buf.trim()) {
+    const part = JSON.parse(buf);
+    if (part.error) throw new Error(`Ollama: ${part.error}`);
+    content += part.message?.content ?? "";
   }
   const j = { message: { content } };
   try {
