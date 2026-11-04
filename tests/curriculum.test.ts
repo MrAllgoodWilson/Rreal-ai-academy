@@ -9,11 +9,47 @@ describe("curriculum integrity", () => {
     expect(new Set(TRACKS.flatMap((t) => t.weeks.map((w) => w.number)))).toEqual(new Set([1, 2, 3, 4, 5, 6, 7, 8]));
   });
   it("has unique lesson and quiz ids, and valid answers (program + courses)", () => {
-    const ids = ALL_LESSONS.map((r) => r.lesson.id);
+    // Check raw data: the runtime index deliberately skips duplicate lesson IDs.
+    const raw = ALL_TRACKS.flatMap((t) => t.weeks.flatMap((w) => w.modules.flatMap((m) => m.lessons)));
+    const ids = raw.map((lesson) => lesson.id);
     expect(new Set(ids).size).toBe(ids.length);
-    const quizzes = ALL_LESSONS.flatMap((r) => r.lesson.blocks).filter((b) => b.type === "quiz");
+    const quizzes = raw.flatMap((lesson) => lesson.blocks).filter((b) => b.type === "quiz");
     expect(new Set(quizzes.map((q) => (q as { id: string }).id)).size).toBe(quizzes.length);
     for (const q of quizzes) if (q.type === "quiz") expect(q.answer).toBeLessThan(q.options.length);
+  });
+});
+
+describe("reviewed weekly course extension", () => {
+  const ids = ["dum-w2-clear-prompts", "dum-w3-check-answers", "dum-w4-private-data"];
+  const course = ALL_TRACKS.find((t) => t.id === "c-ai-dummies")!;
+  it("preserves existing lesson IDs in the original first-week module", () => {
+    expect(course.weeks[0].number).toBe(1);
+    expect(course.weeks[0].modules[0].id).toBe("c-ai-dummies-m1");
+    expect(course.weeks[0].modules[0].lessons.map((l) => l.id)).toEqual(["dum-sign-up", "dum-everyday", "dum-safety"]);
+    expect(course.weeks.slice(1).map((w) => w.number)).toEqual([2, 3, 4]);
+  });
+  it("each new lesson has one four-option quiz and one prompt lab in 4–6 blocks", () => {
+    for (const id of ids) {
+      const lesson = ALL_LESSONS.find((r) => r.lesson.id === id)!.lesson;
+      expect(lesson.blocks.length).toBeGreaterThanOrEqual(4);
+      expect(lesson.blocks.length).toBeLessThanOrEqual(6);
+      const quizzes = lesson.blocks.filter((b) => b.type === "quiz");
+      expect(quizzes).toHaveLength(1);
+      for (const q of quizzes) if (q.type === "quiz") {
+        expect(q.options).toHaveLength(4);
+        expect(Number.isInteger(q.answer)).toBe(true);
+        expect(q.answer).toBeGreaterThanOrEqual(0);
+        expect(q.answer).toBeLessThan(4);
+      }
+      expect(lesson.blocks.filter((b) => b.type === "prompt-lab")).toHaveLength(1);
+    }
+  });
+  it("enforces the seven-day boundary for the new standalone week", () => {
+    const start = Date.UTC(2026, 10, 4);
+    const completed = Object.fromEntries(["dum-sign-up", "dum-everyday", "dum-safety"].map((id) => [id, { at: new Date(start).toISOString() }]));
+    expect(lockReason(ids[0], completed, { subscribed: true, now: start + 7 * 86_400_000 - 1 })).toBe("scheduled");
+    expect(lockReason(ids[0], completed, { subscribed: true, now: start + 7 * 86_400_000 })).toBeNull();
+    expect(lockReason(ids[0], completed, { subscribed: false, now: start + 8 * 86_400_000 })).toBe("subscription");
   });
 });
 

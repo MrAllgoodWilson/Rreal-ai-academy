@@ -29,7 +29,7 @@ export const IFILMS_URL = "https://ifilmsstudio.pics";
 const IFILMS = (what: string): Block => ({ type: "tip", body: `Ready to share your ${what}? iFilms Studios (${IFILMS_URL}) gives creators their own channel: publish your catalogue, keep your cut, and reach viewers without fighting the algorithm. Every release is reviewed, so polish it first.` });
 const L = (id: string, title: string, minutes: number, xp: number, summary: string, blocks: Block[]): Lesson => ({ id, title, minutes, xp, summary, blocks });
 
-function course(c: { id: string; level: TrackLevel; category: Category; emoji: string; name: string; tagline: string; outcome: string; lessons: Lesson[] }): Track {
+function course(c: { id: string; level: TrackLevel; category: Category; emoji: string; name: string; tagline: string; outcome: string; lessons: Lesson[]; weeklyLessons?: Lesson[] }): Track {
   return {
     id: c.id,
     kind: "course",
@@ -42,7 +42,10 @@ function course(c: { id: string; level: TrackLevel; category: Category; emoji: s
     gradient: GRADIENTS[c.category],
     emoji: c.emoji,
     certificateTitle: `Rreal Certified: ${c.name}`,
-    weeks: [{ number: 1, title: "Self-paced", modules: [{ id: `${c.id}-m1`, title: c.name, description: c.tagline, lessons: c.lessons }] }],
+    weeks: [
+      { number: 1, title: c.weeklyLessons?.length ? "Getting started" : "Self-paced", modules: [{ id: `${c.id}-m1`, title: c.name, description: c.tagline, lessons: c.lessons }] },
+      ...(c.weeklyLessons ?? []).map((lesson, i) => ({ number: i + 2, title: lesson.title, modules: [{ id: `${c.id}-w${i + 2}-m1`, title: lesson.title, description: lesson.summary, lessons: [lesson] }] })),
+    ],
   };
 }
 
@@ -55,6 +58,32 @@ export const COURSES: Track[] = [
     name: "AI for Total Dummies: ChatGPT & Claude in 7 Days",
     tagline: "Never used AI? Start here. One small win a day.",
     outcome: "Use ChatGPT or Claude confidently for everyday tasks: emails, plans, recipes, questions.",
+    weeklyLessons: [
+      L("dum-w2-clear-prompts", "Ask Clearly, Get Useful Answers", 8, 60, "Give AI a clear task, safe context, limits and a useful output format.", [
+        T("Give your helper a clear job", "AI cannot reliably guess what you mean. Start with what you want done, who the answer is for, and the details needed to do it. A clear request improves your chances of a useful answer, but you still need to review it."),
+        K("Four useful ingredients", ["Task: explain, draft, compare or plan one specific thing.", "Context: include the audience and relevant, non-sensitive facts.", "Constraints: state limits such as time, length or a practice budget.", "Format: ask for a checklist, short paragraph or table."]),
+        EX("A made-up practice request", "Help me plan a quiet birthday gathering for six adults at home. My example budget is $60. Suggest three activities and a shopping checklist. Mark any prices as estimates for me to verify.", "Plan something nice."),
+        Q("dum-w2-clear-prompts-q1", "Which request gives AI the clearest job?", ["Make it good.", "Draft a friendly, 80-word invitation for six adult guests, using placeholders for the address and date.", "Tell me everything.", "Guess what I need."], 1, "The invitation request names the task, audience, tone, length and safe placeholders."),
+        LAB("Rewrite 'plan my day' as a clear request. Include your goal, two made-up time limits and a checklist format. Do not include your real address, passwords or private appointments.", 65),
+        TIP("Read the answer before using it. If AI guessed a missing detail, replace it with a verified fact or ask it to leave a placeholder."),
+      ]),
+      L("dum-w3-check-answers", "Check an Answer Without Guessing", 9, 60, "Trace a claim to a relevant source and label what you cannot verify.", [
+        T("A confident answer can still be wrong", "An AI answer may contain an incorrect fact or a source that does not exist. Pick one checkable claim, open the original source yourself, and see whether it supports the exact statement. Asking AI how sure it is is not a substitute for checking."),
+        K("A small fact-checking routine", ["Write down the exact claim, not just its general topic.", "Find a relevant original source, such as the organization responsible for the information.", "Check the source date, location and any important conditions.", "If the evidence is missing or unclear, label the claim unverified instead of repeating it as fact."]),
+        EX("Practice with a fictional notice", "Source supplied for this exercise: 'The neighborhood workshop opens at 10 a.m. on Saturday.' A summary saying it opens at 9 a.m. does not match. Correct the time using the supplied notice; do not invent another source."),
+        Q("dum-w3-check-answers-q1", "AI supplies a link, but you cannot find support for its claim there. What next?", ["Assume the claim is right because it has a link.", "Ask for a more confident tone.", "Mark it unverified and seek relevant evidence before using it.", "Invent a source that sounds official."], 2, "A link is useful only when its actual content supports the claim. Missing evidence stays unverified."),
+        LAB("Using a short, non-sensitive notice you can open and verify, ask AI to summarize it in three bullets and list any unanswered questions. Tell it to use only the supplied notice and not invent missing facts or citations.", 65),
+        TIP("For medical, legal or financial decisions, use appropriate qualified help. A checked summary is still not a professional assessment of your situation."),
+      ]),
+      L("dum-w4-private-data", "Keep Personal Information Private", 8, 60, "Use obvious placeholders and leave unnecessary sensitive details out.", [
+        T("Share less, not more", "Before sending a prompt, remove information the task does not need. Replace identifying details with obvious labels such as [CUSTOMER_NAME] or [ADDRESS]. Changing a name alone does not guarantee anonymity: other details may still identify someone."),
+        K("Check before you paste", ["Never include passwords, API keys, login codes or bank-account numbers.", "Use clearly marked placeholders rather than realistic-looking fake contact details.", "Leave out private medical, financial and other people's personal records for these exercises.", "Check your organization's rules and the tool's current data settings before using work information."]),
+        EX("A safe practice rewrite", "Draft a polite update to [CUSTOMER_NAME] about order [ORDER_ID]. Say the status is [VERIFIED_STATUS] and leave the date as [DATE] for me to check before sending.", "Paste a real customer's full record and ask AI to sort it out."),
+        Q("dum-w4-private-data-q1", "What is the safest way to practice drafting a customer message?", ["Paste the full customer database.", "Share a password so AI can find the details.", "Replace just the name and assume every other detail is anonymous.", "Use a fictional example with obvious placeholders and no unnecessary sensitive details."], 3, "A fictional, minimal example avoids exposing a real person's data. Placeholders do not make every real record anonymous."),
+        LAB("Ask AI to draft a three-sentence order update using [CUSTOMER_NAME], [ORDER_ID] and [DATE]. Specify a friendly tone, require a human review step, and tell it not to invent a delivery promise.", 65),
+        TIP("Review the result for invented details before restoring any real information in your own approved workflow. Do not ask AI to send the message or sign in to an account."),
+      ]),
+    ],
     lessons: [
       L("dum-sign-up", "Day 1: Open Your First AI Account", 6, 40, "Pick a chatbot, create a free account and say hello.", [
         K("Pick one to start", ["ChatGPT (chatgpt.com) — free plan available", "Claude (claude.ai) — free plan available", "Gemini (gemini.google.com) — free with a Google account", "You only need ONE to begin. They all work the same way: you type, it answers."]),
