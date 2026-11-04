@@ -10,7 +10,7 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 export const QUOTAS = {
   coach: { limit: Number(process.env.QUOTA_COACH_PER_DAY ?? 40), period: "day" },
   sandbox: { limit: Number(process.env.QUOTA_SANDBOX_PER_DAY ?? 25), period: "day" },
-  course: { limit: Number(process.env.QUOTA_COURSES_PER_MONTH ?? 2), period: "month" },
+  course: { limit: Number(process.env.QUOTA_COURSES_PER_DAY ?? 5), period: "day" }, // abuse guard; each course also costs a $9.99 credit
   playbook: { limit: Number(process.env.QUOTA_PLAYBOOKS_PER_MONTH ?? 5), period: "month" },
   video: { limit: Number(process.env.QUOTA_VIDEOS_PER_MONTH ?? 1), period: "month" },
   tts: { limit: Number(process.env.QUOTA_TTS_PER_DAY ?? 60), period: "day" },
@@ -34,6 +34,25 @@ export async function getMember(opts: { requireSubscription?: boolean } = {}): P
   const subscribed = !!sub;
   if (opts.requireSubscription && !subscribed) return { error: NextResponse.json({ error: "An active membership ($1/month) is required.", code: "subscription_required" }, { status: 402 }) };
   return { demo: false, member: { sb, user: data.user, subscribed } };
+}
+
+/** Like takeQuota but returns true/false instead of a response. */
+export async function tryQuota(m: Member, kind: QuotaKind): Promise<boolean> {
+  const q = QUOTAS[kind];
+  const { data, error } = await m.sb.rpc("consume_quota", { p_kind: kind, p_limit: q.limit, p_period: q.period });
+  return !error && !!data;
+}
+
+/** Spends one credit from the learner's wallet. */
+export async function spendCredit(m: Member, kind: "video" | "course", ref: string): Promise<boolean> {
+  const { data, error } = await m.sb.rpc("spend_credit", { p_kind: kind, p_ref: ref });
+  return !error && !!data;
+}
+
+/** Gives a credit back after a failed generation (service role). */
+export async function refundCredit(userId: string, kind: "video" | "course", ref: string) {
+  const { getSupabaseAdmin } = await import("@/lib/supabase/server");
+  await getSupabaseAdmin()?.rpc("grant_credits", { p_user: userId, p_kind: kind, p_qty: 1, p_reason: "refund", p_ref: `refund:${ref}` });
 }
 
 /** Consumes one unit of the learner's quota. Returns an error response when exhausted. */

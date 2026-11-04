@@ -37,7 +37,7 @@ export default function PricingPage() {
         <Link href={href} className="btn-primary mt-10 text-lg">{subscribed ? t("pay.active") : t("pay.cta")}</Link>
         <p className="mt-4 text-sm text-muted">Billed monthly in USD via Stripe. Cancel anytime in Settings → Plan & billing.</p>
       </motion.div>
-      <p className="mt-6 text-center text-sm text-muted">Fair-use limits keep the price at $1: e.g. 40 Coach messages/day, 2 custom AI courses and 1 AI video render per month.</p>
+      <p className="mt-6 text-center text-sm text-muted">Optional power-ups: build your own custom course for $9.99, and AI video credits from $4.99 (1 free render every month). Fair-use limits keep membership at $1 forever.</p>
     </div>
   );
 }

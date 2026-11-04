@@ -58,7 +58,7 @@ export function VideoRenderer({ defaultPrompt }: { defaultPrompt: string }) {
         {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Film className="h-4 w-4" aria-hidden="true" />}
         {busy ? `Rendering… (${status})` : "Render with AI"}
       </button>
-      <p className="text-xs text-muted">Included: 1 AI render per month on the $1 plan. Clips take 1–5 minutes. Label realistic AI video when you post it.</p>
+      <p className="text-xs text-muted">Included: 1 free AI render every month; more with <a href="/credits" className="text-neon underline">video credits</a> (5 for $4.99). Clips take 1–5 minutes. Label realistic AI video when you post it.</p>
       {url && (
         <div className="space-y-2">
           <video src={url} controls playsInline className="max-h-[480px] rounded-xl" aria-label="Your rendered AI video" />

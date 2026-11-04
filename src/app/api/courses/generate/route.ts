@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { callClaude } from "@/lib/claude";
 import { COURSE_SYSTEM_PROMPT, CATEGORIES, GeneratedCourseSchema, toTrack } from "@/lib/course-schema";
-import { getMember, takeQuota } from "@/lib/server-auth";
+import { getMember, takeQuota, spendCredit, refundCredit } from "@/lib/server-auth";
 import { dispatchPluginEvent } from "@/lib/plugins/dispatch";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import type { Category, TrackLevel } from "@/lib/curriculum/types";
@@ -27,10 +27,15 @@ export async function POST(req: Request) {
   const who = await getMember({ requireSubscription: true });
   if ("error" in who) return who.error;
   if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "The AI course builder isn't configured yet (missing ANTHROPIC_API_KEY)." }, { status: 503 });
+  const spendRef = `course:${randomBytes(8).toString("hex")}`;
   if (!who.demo) {
     const limited = await takeQuota(who.member, "course");
     if (limited) return limited;
+    if (!(await spendCredit(who.member, "course", spendRef))) return NextResponse.json({ error: "Creating your own course costs $9.99. Buy a course credit to continue.", code: "credits_required", kind: "course" }, { status: 402 });
   }
+  const refund = async () => {
+    if (!who.demo) await refundCredit(who.member.user.id, "course", spendRef);
+  };
 
   const levelName = ["", "absolute beginner (dummy)", "beginner", "intermediate", "advanced", "expert"][level];
   const raw = await callClaude({
@@ -38,23 +43,33 @@ export async function POST(req: Request) {
     messages: [{ role: "user", content: `Learner request: """${request}"""\nLevel: ${levelName}\nWrite the entire course in ${language === "es" ? "Latin American Spanish" : "English"}.` }],
     maxTokens: 8000,
   }).catch(() => null);
-  if (!raw) return NextResponse.json({ error: "The AI couldn't build that course right now. Please try again." }, { status: 502 });
+  if (!raw) {
+    await refund();
+    return NextResponse.json({ error: "The AI couldn't build that course right now. Your credit was returned — please try again." }, { status: 502 });
+  }
 
   let json: unknown;
   try {
     json = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
   } catch {
-    return NextResponse.json({ error: "The AI returned an unreadable course. Please try again." }, { status: 502 });
+    await refund();
+    return NextResponse.json({ error: "The AI returned an unreadable course. Your credit was returned — please try again." }, { status: 502 });
   }
   const course = GeneratedCourseSchema.safeParse(json);
-  if (!course.success) return NextResponse.json({ error: "The AI course didn't pass quality checks. Please try again or rephrase." }, { status: 502 });
+  if (!course.success) {
+    await refund();
+    return NextResponse.json({ error: "The AI course didn't pass quality checks. Your credit was returned — please try again or rephrase." }, { status: 502 });
+  }
 
   const category = parsed.data.category ?? "foundations";
   const track = toTrack(course.data, { level: level as TrackLevel, category, language, suffix: randomBytes(3).toString("hex") });
 
   if (!who.demo) {
     const { error } = await who.member.sb.rpc("create_custom_course", { p_course: track, p_request: request });
-    if (error) return NextResponse.json({ error: "Couldn't save your course. Please try again." }, { status: 500 });
+    if (error) {
+      await refund();
+      return NextResponse.json({ error: "Couldn't save your course. Your credit was returned — please try again." }, { status: 500 });
+    }
     dispatchPluginEvent(who.member.sb, who.member.user.id, "course.created", { title: track.name, id: track.id });
   }
   return NextResponse.json({ track });

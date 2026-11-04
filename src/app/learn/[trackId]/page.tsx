@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 import { CheckCircle2, Lock, PlayCircle } from "lucide-react";
 import { RequireMember } from "@/components/RequireAuth";
 import { ProgressBar } from "@/components/ui/ProgressRing";
-import { LEVEL_NAMES, getTrack, lockReason, trackProgress } from "@/lib/curriculum";
+import { LEVEL_NAMES, getTrack, lockReason, trackProgress, weekUnlockDate } from "@/lib/curriculum";
 import { useTranslated } from "@/lib/i18n";
 import { useAcademy } from "@/lib/store";
 
@@ -52,14 +52,15 @@ function TrackView({ trackId }: { trackId: string }) {
                   const done = !!progress.completed[l.id];
                   const lock = lockReason(l.id, progress.completed, { subscribed, placementLevel: progress.onboarding.placementLevel });
                   const Icon = done ? CheckCircle2 : lock ? Lock : PlayCircle;
-                  const status = done ? "completed" : lock === "subscription" ? "requires subscription" : lock ? "locked" : "available";
+                  const opens = lock === "scheduled" ? weekUnlockDate(l.id, progress.completed) : null;
+                  const status = done ? "completed" : lock === "subscription" ? "requires subscription" : opens ? `opens ${opens.toLocaleDateString()}` : lock ? "locked" : "available";
                   return (
                     <motion.li key={l.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}>
                       <Link href={lock === "subscription" ? "/subscribe" : `/lesson/${l.id}`} aria-disabled={lock === "prerequisite"} className={`flex items-center gap-4 rounded-xl border p-4 transition ${lock ? "border-line/50 opacity-70" : "border-line hover:border-neon hover:bg-raised/50"}`}>
                         <Icon className={`h-7 w-7 shrink-0 ${done ? "text-lime" : lock ? "text-muted" : "text-neon"}`} aria-hidden="true" />
                         <span className="flex-1">
                           <span className="block font-semibold">{l.title}<span className="sr-only"> — {status}</span></span>
-                          <span className="block text-sm text-muted">{l.summary}</span>
+                          <span className="block text-sm text-muted">{opens ? `🗓 Opens ${opens.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}` : l.summary}</span>
                         </span>
                         <span className="hidden shrink-0 text-right text-xs text-muted sm:block">{l.minutes} min<br />⚡ {l.xp} XP</span>
                       </Link>

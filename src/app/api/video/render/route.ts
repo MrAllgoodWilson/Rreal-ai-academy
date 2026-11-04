@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getMember, takeQuota } from "@/lib/server-auth";
+import { getMember, tryQuota, spendCredit, refundCredit } from "@/lib/server-auth";
+import { randomBytes } from "node:crypto";
 import { startVideo, videoConfigured } from "@/lib/video";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
@@ -13,11 +14,19 @@ export async function POST(req: Request) {
   const who = await getMember({ requireSubscription: true });
   if ("error" in who) return who.error;
   if (who.demo) return NextResponse.json({ error: "AI video rendering requires the production database." }, { status: 501 });
-  const limited = await takeQuota(who.member, "video");
-  if (limited) return limited;
+  // 1 free render per month is included; after that each render uses a video credit.
+  const spendRef = `video:${randomBytes(8).toString("hex")}`;
+  let usedCredit = false;
+  if (!(await tryQuota(who.member, "video"))) {
+    usedCredit = await spendCredit(who.member, "video", spendRef);
+    if (!usedCredit) return NextResponse.json({ error: "You've used your free AI video this month. Grab a credit pack to keep rendering.", code: "credits_required", kind: "video" }, { status: 402 });
+  }
 
   const job = await startVideo(parsed.data.prompt);
-  if ("error" in job) return NextResponse.json({ error: job.error }, { status: 502 });
+  if ("error" in job) {
+    if (usedCredit) await refundCredit(who.member.user.id, "video", spendRef);
+    return NextResponse.json({ error: job.error }, { status: 502 });
+  }
   const { data, error } = await who.member.sb.from("video_renders").insert({ user_id: who.member.user.id, provider: "replicate", provider_job_id: job.id, prompt: parsed.data.prompt, status: "queued" }).select("id").single();
   if (error) return NextResponse.json({ error: "Couldn't save the render." }, { status: 500 });
   return NextResponse.json({ id: data.id, status: "queued" });

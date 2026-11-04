@@ -108,7 +108,7 @@ function Creator() {
           {busy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Wand2 className="h-5 w-5" aria-hidden="true" />}
           {busy ? "Building your course… (up to 1 minute)" : "Build my course"}
         </button>
-        <p className="text-xs text-muted">Members can build 2 custom courses per month. AI can make mistakes — courses are reviewed before being offered to everyone.</p>
+        <p className="text-xs text-muted">Each custom course is a one-time <strong>$9.99</strong> (credits never expire; failed builds are refunded automatically). AI can make mistakes — courses are reviewed before being offered to everyone. <a href="/credits" className="text-neon underline">Buy a course credit</a></p>
       </form>
 
       {busy && (

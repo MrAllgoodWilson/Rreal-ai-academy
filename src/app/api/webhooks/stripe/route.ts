@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe, verifyWebhook } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { CREDIT_PACKS, packByPaymentLink } from "@/lib/credits";
 
 
 const ACTIVE = new Set(["active", "trialing", "past_due", "canceled", "unpaid", "incomplete", "incomplete_expired", "paused"]);
@@ -45,6 +46,13 @@ export async function POST(req: Request) {
     switch (event.type) {
       case "checkout.session.completed": {
         const s = event.data.object as Stripe.Checkout.Session;
+        // One-time credit pack purchase → add credits to the learner's wallet (idempotent per session).
+        if (s.mode === "payment" && s.client_reference_id && s.payment_status === "paid") {
+          const link = typeof s.payment_link === "string" ? s.payment_link : s.payment_link?.id;
+          const pack = packByPaymentLink(link) ?? CREDIT_PACKS.find((p) => p.kind === s.metadata?.credit_kind && String(p.qty) === s.metadata?.credit_qty);
+          if (pack) await admin.rpc("grant_credits", { p_user: s.client_reference_id, p_kind: pack.kind, p_qty: pack.qty, p_reason: "purchase", p_ref: s.id });
+          break;
+        }
         if (s.mode !== "subscription" || !s.subscription || !s.client_reference_id) break;
         const subId = typeof s.subscription === "string" ? s.subscription : s.subscription.id;
         const stripe = getStripe();

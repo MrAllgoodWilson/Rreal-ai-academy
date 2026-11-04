@@ -12,7 +12,7 @@ const DICT = {
   en: {
     "nav.dashboard": "Dashboard", "nav.learn": "Learn", "nav.courses": "Courses", "nav.playbooks": "Playbooks", "nav.coach": "Coach", "nav.sandbox": "Sandbox",
     "nav.studio": "Studio", "nav.leagues": "Leagues", "nav.create": "Create a course", "nav.review": "Daily Review", "nav.badges": "Badges",
-    "nav.certificates": "Certificates", "nav.portfolio": "Portfolio", "nav.connections": "Connections & Plugins", "nav.settings": "Settings", "nav.signout": "Sign out",
+    "nav.certificates": "Certificates", "nav.portfolio": "Portfolio", "nav.connections": "Connections & Plugins", "nav.credits": "Credits & power-ups", "nav.settings": "Settings", "nav.signout": "Sign out",
     "nav.signin": "Sign in", "nav.join": "Join for $1/mo", "nav.a11y": "Accessibility settings (Alt+A)", "nav.lang": "Español",
     "skip": "Skip to main content",
     "auth.welcome": "Welcome back", "auth.welcomeSub": "Sign in to keep your streak alive.", "auth.identifier": "Email or username", "auth.password": "Password",
@@ -41,7 +41,7 @@ const DICT = {
   es: {
     "nav.dashboard": "Panel", "nav.learn": "Aprender", "nav.courses": "Cursos", "nav.playbooks": "Guías", "nav.coach": "Coach", "nav.sandbox": "Laboratorio",
     "nav.studio": "Estudio", "nav.leagues": "Ligas", "nav.create": "Crear un curso", "nav.review": "Repaso diario", "nav.badges": "Insignias",
-    "nav.certificates": "Certificados", "nav.portfolio": "Portafolio", "nav.connections": "Conexiones y plugins", "nav.settings": "Ajustes", "nav.signout": "Cerrar sesión",
+    "nav.certificates": "Certificados", "nav.portfolio": "Portafolio", "nav.connections": "Conexiones y plugins", "nav.credits": "Créditos", "nav.settings": "Ajustes", "nav.signout": "Cerrar sesión",
     "nav.signin": "Iniciar sesión", "nav.join": "Únete por $1/mes", "nav.a11y": "Ajustes de accesibilidad (Alt+A)", "nav.lang": "English",
     "skip": "Saltar al contenido principal",
     "auth.welcome": "Bienvenido de nuevo", "auth.welcomeSub": "Inicia sesión para mantener tu racha.", "auth.identifier": "Correo o usuario", "auth.password": "Contraseña",

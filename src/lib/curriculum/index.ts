@@ -50,7 +50,27 @@ export const lessonsForTrack = (trackId: string) => ALL_LESSONS.filter((r) => r.
 export const programLessons = () => ALL_LESSONS.filter((r) => r.track.kind === "program");
 export const TOTAL_WEEKS = Math.max(...TRACKS.flatMap((t) => t.weeks.map((w) => w.number)));
 
-export type LockReason = "subscription" | "prerequisite" | null;
+export type LockReason = "subscription" | "prerequisite" | "scheduled" | null;
+
+type Completed = Record<string, unknown>;
+const completedAt = (v: unknown) => (v && typeof v === "object" && "at" in v ? Date.parse(String((v as { at: string }).at)) : NaN);
+
+/**
+ * Weekly release schedule (mirrors week_unlock_at() in SQL): the week a learner starts in opens immediately;
+ * each later week opens 7 days after their first completed lesson in that program/course.
+ */
+export function weekUnlockDate(id: string, completed: Completed): Date | null {
+  const ref = byId.get(id);
+  if (!ref) return null;
+  const siblings = ref.track.kind === "program" ? programLessons() : lessonsForTrack(ref.track.id);
+  let first: { at: number; week: number } | null = null;
+  for (const r of siblings) {
+    const at = completedAt(completed[r.lesson.id]);
+    if (!Number.isNaN(at) && (!first || at < first.at)) first = { at, week: r.week.number };
+  }
+  if (!first || ref.week.number <= first.week) return null;
+  return new Date(first.at + (ref.week.number - first.week) * 7 * 86_400_000);
+}
 
 /**
  * Gating logic (all content is paid — membership is $1/month):
@@ -58,10 +78,14 @@ export type LockReason = "subscription" | "prerequisite" | null;
  *  2. Mastery Program: lessons unlock in order across tracks; placement lets learners start at a higher track.
  *  3. Standalone & custom courses: lessons unlock in order inside the course; the first lesson is always open.
  */
-export function lockReason(id: string, completed: Record<string, unknown>, opts: { subscribed: boolean; placementLevel?: number }): LockReason {
+export function lockReason(id: string, completed: Record<string, unknown>, opts: { subscribed: boolean; placementLevel?: number; now?: number }): LockReason {
   const ref = byId.get(id);
   if (!ref) return "prerequisite";
   if (!opts.subscribed) return "subscription";
+  if (!completed[id]) {
+    const opensAt = weekUnlockDate(id, completed);
+    if (opensAt && opensAt.getTime() > (opts.now ?? Date.now())) return "scheduled";
+  }
   const siblings = ref.track.kind === "program" ? programLessons() : lessonsForTrack(ref.track.id);
   const pos = siblings.findIndex((r) => r.lesson.id === id);
   if (pos <= 0) return null;

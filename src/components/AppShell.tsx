@@ -26,6 +26,7 @@ const MORE: { href: string; label: TKey; icon: typeof BookOpen }[] = [
   { href: "/achievements", label: "nav.badges", icon: Award },
   { href: "/certificates", label: "nav.certificates", icon: Award },
   { href: "/portfolio", label: "nav.portfolio", icon: FolderHeart },
+  { href: "/credits", label: "nav.credits", icon: Zap },
   { href: "/connections", label: "nav.connections", icon: Plug },
   { href: "/settings", label: "nav.settings", icon: Settings },
 ];

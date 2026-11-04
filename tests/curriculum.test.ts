@@ -79,3 +79,12 @@ describe("studio + coach", () => {
     expect(ans.reply).toMatch(/Correct/);
   });
 });
+
+describe("weekly release schedule", () => {
+  const prog = ALL_LESSONS.filter((r) => r.track.kind === "program");
+  const w1 = prog.filter((r) => r.week.number === 1);
+  const w2first = prog.find((r) => r.week.number === 2)!.lesson.id;
+  const done = (days: number) => Object.fromEntries(w1.map((r) => [r.lesson.id, { at: new Date(Date.now() - days * 86_400_000).toISOString() }]));
+  it("locks week 2 until 7 days after starting", () => expect(lockReason(w2first, done(1), { subscribed: true })).toBe("scheduled"));
+  it("opens week 2 after 7 days", () => expect(lockReason(w2first, done(8), { subscribed: true })).toBeNull());
+});

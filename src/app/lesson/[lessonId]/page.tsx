@@ -9,7 +9,7 @@ import { RequireMember } from "@/components/RequireAuth";
 import { useI18n, useTranslated } from "@/lib/i18n";
 import { ProgressBar } from "@/components/ui/ProgressRing";
 import { LabBlock, QuizBlock, StaticBlock } from "@/components/LessonBlocks";
-import { ALL_LESSONS, getLessonRef, lockReason } from "@/lib/curriculum";
+import { ALL_LESSONS, getLessonRef, lockReason, weekUnlockDate } from "@/lib/curriculum";
 import { useAcademy } from "@/lib/store";
 import { useA11y } from "@/lib/a11y";
 
@@ -66,8 +66,8 @@ function LessonPlayer({ lessonId }: { lessonId: string }) {
     return (
       <div className="mx-auto grid max-w-lg place-items-center px-4 py-24 text-center">
         <Lock className="h-14 w-14 text-violet" aria-hidden="true" />
-        <h1 className="mt-4 font-display text-3xl font-bold">{reason === "subscription" ? t("lesson.paywall") : t("lesson.locked")}</h1>
-        <p className="mt-2 text-muted">{reason === "subscription" ? "Every course, tool and certificate for $1/month." : "Lessons build on each other. Complete the one before this to unlock it."}</p>
+        <h1 className="mt-4 font-display text-3xl font-bold">{reason === "subscription" ? t("lesson.paywall") : reason === "scheduled" ? `Week ${week.number} opens ${weekUnlockDate(lesson.id, progress.completed)?.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}` : t("lesson.locked")}</h1>
+        <p className="mt-2 text-muted">{reason === "subscription" ? "Every course, tool and certificate for $1/month." : reason === "scheduled" ? "New lessons release every week so you can practice what you learned. Review earlier lessons or try the Coach while you wait." : "Lessons build on each other. Complete the one before this to unlock it."}</p>
         <Link href={reason === "subscription" ? "/subscribe" : `/learn/${track.id}`} className="btn-primary mt-6">{reason === "subscription" ? t("pay.cta") : "Back to course"}</Link>
       </div>
     );
