@@ -4,7 +4,7 @@ Everything that can be done from code is done. These are the remaining steps tha
 Total time: about 20–30 minutes. Hosting: **Cloudflare Workers**.
 
 ## Live status (updated by Claude)
-**Live URL:** https://rreal-ai-academy.alwilson-abc.workers.dev (Cloudflare Workers, deployed from the owner's machine with `~/rreal-deploy.sh`)
+**Live URL:** https://rrealaiacademy.app (custom domain; https://rreal-ai-academy.alwilson-abc.workers.dev also works). Deployed from the owner's machine with `~/rreal-deploy.sh https://rrealaiacademy.app`.
 
 | Item | Status |
 |---|---|
@@ -14,7 +14,7 @@ Total time: about 20–30 minutes. Hosting: **Cloudflare Workers**.
 | Stripe $1/month price, payment link (redirects back to the site), live webhook `we_1UXpIWK68Pw0CGHvolRNKn5E` | ✅ |
 | `SUPABASE_SERVICE_ROLE_KEY` + AI/voice/video/social/email keys | ⏳ owner fills `~/rreal-secrets.env`, then runs `~/rreal-upload-keys.sh` |
 | Supabase Auth URL configuration + custom SMTP | ⏳ owner (dashboard only) |
-| GitHub → Cloudflare auto-deploy (Workers Builds) | optional — redeploy any time with `~/rreal-deploy.sh https://rreal-ai-academy.alwilson-abc.workers.dev` |
+| GitHub → Cloudflare auto-deploy (Workers Builds) | optional — redeploy any time with `~/rreal-deploy.sh https://rrealaiacademy.app` |
 
 ## 1. Deploy on Cloudflare Workers (gets you the live link)
 The app runs on Cloudflare Workers through the official OpenNext adapter (`wrangler.jsonc`, `open-next.config.ts`). It was built and fully tested in Cloudflare's runtime (67/67 checks).
