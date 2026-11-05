@@ -22,13 +22,18 @@ export async function POST(req: Request) {
   if (!admin) return NextResponse.json({ error: "Account deletion isn't available right now. Email support@rrealaiacademy.app." }, { status: 503 });
   const { sb, user } = who.member;
 
-  const { data: live } = await sb.from("subscriptions").select("status").eq("user_id", user.id).in("status", ["active", "trialing", "past_due"]).limit(1).maybeSingle();
+  // Fail closed: if a safety lookup errors, delete nothing (otherwise a DB/RLS hiccup could bypass the billing or course safeguards).
+  const unavailable = () => NextResponse.json({ error: "We couldn't verify your account just now, so nothing was deleted. Please try again in a minute or email support@rrealaiacademy.app." }, { status: 503 });
+  const { data: live, error: subErr } = await sb.from("subscriptions").select("status").eq("user_id", user.id).in("status", ["active", "trialing", "past_due"]).limit(1).maybeSingle();
+  if (subErr) return unavailable();
   if (live) return NextResponse.json({ error: "Please cancel your membership first (Settings → Plan & billing), or email support@rrealaiacademy.app and we'll cancel and delete for you.", code: "cancel_first" }, { status: 409 });
 
-  const { data: published } = await admin.from("custom_courses").select("id").eq("owner_id", user.id).eq("status", "published");
+  const { data: published, error: pubErr } = await admin.from("custom_courses").select("id").eq("owner_id", user.id).eq("status", "published");
+  if (pubErr) return unavailable();
   if (published?.length) {
     const adminEmails = (process.env.ADMIN_EMAILS || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-    const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+    const { data: list, error: listErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+    if (listErr) return unavailable();
     const owner = list?.users.find((u) => u.id !== user.id && u.email && adminEmails.includes(u.email.toLowerCase()));
     if (!owner) return NextResponse.json({ error: "You've published courses for everyone. Please email support@rrealaiacademy.app so we can hand them over before deleting.", code: "contact_support" }, { status: 409 });
     const ids = published.map((c) => c.id);
