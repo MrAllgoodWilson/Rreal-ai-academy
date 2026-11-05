@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getMember, tryQuota, spendCredit, refundCredit } from "@/lib/server-auth";
+import { getMember, spendCredit, refundCredit } from "@/lib/server-auth";
 import { randomBytes } from "node:crypto";
 import { startVideo, videoConfigured } from "@/lib/video";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
@@ -16,12 +16,12 @@ export async function POST(req: Request) {
   const who = await getMember({ requireSubscription: true });
   if ("error" in who) return who.error;
   if (who.demo) return NextResponse.json({ error: "AI video rendering requires the production database." }, { status: 501 });
-  // With their own Replicate account, renders bill to the member. Otherwise 1 free render/month, then video credits.
+  // Member-owned Replicate bills the member directly. Every Academy-funded render requires a purchased credit.
   const spendRef = `video:${randomBytes(8).toString("hex")}`;
   let usedCredit = false;
-  if (!own && !(await tryQuota(who.member, "video"))) {
+  if (!own) {
     usedCredit = await spendCredit(who.member, "video", spendRef);
-    if (!usedCredit) return NextResponse.json({ error: "You've used your free AI video this month. Grab a credit pack to keep rendering.", code: "credits_required", kind: "video" }, { status: 402 });
+    if (!usedCredit) return NextResponse.json({ error: "Purchase a video credit pack to render with Rreal. No free rendering credits are included.", code: "credits_required", kind: "video" }, { status: 402 });
   }
 
   const job = await startVideo(parsed.data.prompt, own);
