@@ -25,3 +25,7 @@ No watcher/cron is enabled by this package, and no new completion-monitor automa
 
 ## Source status and limitations
 Checked official Apple iPhone user guide, Apple accessibility features, Google Android version/backup/permission guides, Google Select to Speak, Apple scam guidance, Pixel emergency-help guidance, Gemini mobile availability and Samsung Galaxy update/Circle to Search help. Exact feature eligibility remains device-specific; no latest OS version number is hardcoded. Two Apple deep-link fetches returned429; those pages are not cited as reviewed support for exact paths. No personal phone was accessed, no device screenshots were tested, no production changes made.
+
+
+## Implemented source-change detector
+Run `node scripts/check-smartphone-guides.mjs work/smartphone-source-review.json`. It reads the fixed official allowlist in SMARTPHONE_SOURCES.json, limits response size/time, refuses redirects and unexpected destinations, records hashes and queues initial/changed/unavailable sources for review. A hash difference is not proof a phone feature changed; an unchanged page does not prove every instruction remains correct. It never edits or publishes course content. Tests use local response fixtures; no provider model calls. No recurring schedule is enabled. An approved n8n/backend job can invoke this bounded checker later without any AI step, then notify a human reviewer.
