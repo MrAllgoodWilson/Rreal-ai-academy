@@ -10,6 +10,8 @@ export async function GET() {
   const who = await getMember();
   if ("error" in who) return who.error;
   if (who.demo) return NextResponse.json({ error: "Referral payments require a real membership." }, { status: 503 });
+  const { error: redemptionError } = await who.member.sb.rpc("referral_credit_own_rewards");
+  if (redemptionError) return NextResponse.json({ error: "Referral reward reconciliation is temporarily unavailable." }, { status: 503 });
   const { data, error } = await who.member.sb.rpc("referral_dashboard");
   if (error) return NextResponse.json({ error: "Referral status could not be loaded." }, { status: 503 });
   const dashboard = data as ReferralDashboard;

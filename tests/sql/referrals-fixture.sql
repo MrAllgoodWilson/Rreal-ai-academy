@@ -1,4 +1,6 @@
 -- Disposable local database only; never run this against Supabase.
+do $$begin if(select hold_days from public.referral_policy where id)<>0 then raise exception 'owner immediate policy not default';end if;end$$;
+update public.referral_policy set hold_days=30;
 insert into public.profiles values(md5('referrer')::uuid);
 select public.referral_record_first_payment(md5('referrer')::uuid,'referrer-session','referrer-customer',100,'usd',now()-interval '31 days');
 -- Renewal/replay cannot issue another identity or paid qualification.
@@ -18,7 +20,7 @@ do $$declare i integer;v_uid uuid;v_code text;begin
   perform set_config('request.jwt.claim.sub',v_uid::text,false);
   if not public.referral_attribute(v_code) then raise exception 'attribution failed';end if;
   if public.referral_attribute(v_code) then raise exception 'duplicate attribution accepted';end if;
-  perform public.referral_record_first_payment(v_uid,'session-'||i,'customer-'||i,100,'usd',now()-interval '31 days');
+  perform public.referral_record_first_payment(v_uid,'session-'||i,'customer-'||i,100,'usd',now());
  end loop;
 end$$;
 -- One recently paid learner remains pending; one refunded learner never qualifies.
@@ -57,6 +59,8 @@ do $$begin
 end$$;
 reset role;
 
+-- Mature forty held payments together for the concurrency fixture; hold remains on recent41.
+update public.referral_first_payments set qualified_at=now()-interval '1 day' where session_id in (select 'session-'||i from generate_series(1,40)i);
 -- Forced failure in the last reward write must roll back both reward and cohort.
 create function public.fixture_reject_reward_members() returns trigger language plpgsql as $$begin raise exception 'fixture reward write failure'; end$$;
 create trigger fixture_reward_failure before insert on public.referral_reward_members for each row execute function public.fixture_reject_reward_members();

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe, verifyWebhook } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { processReferralPaymentEvent } from "@/lib/referrals-server";
 import { CREDIT_PACKS, packByPaymentLink } from "@/lib/credits";
 
 
@@ -103,6 +104,7 @@ export async function POST(req: Request) {
         break;
       }
     }
+    await processReferralPaymentEvent(event, admin, getStripe());
   } catch (e) {
     await admin.from("webhook_events").delete().eq("id", event.id);
     console.error("Stripe webhook failed", e);
