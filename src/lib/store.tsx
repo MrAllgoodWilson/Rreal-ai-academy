@@ -148,7 +148,7 @@ interface Ctx {
   todayXp: number;
   celebrations: Celebration[];
   dismissCelebration: () => void;
-  signUp: (i: { email: string; username: string; password: string; displayName: string }) => Promise<Result>;
+  signUp: (i: { email: string; username: string; password: string; displayName: string; referralCode?: string }) => Promise<Result>;
   signIn: (i: { identifier: string; password: string }) => Promise<Result>;
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<Result>;
@@ -312,7 +312,7 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
     setSubscription(blob.subscription);
   };
 
-  const signUp: Ctx["signUp"] = async ({ email, username, password, displayName }) => {
+  const signUp: Ctx["signUp"] = async ({ email, username, password, displayName, referralCode }) => {
     email = email.trim().toLowerCase();
     if (!USERNAME_RE.test(username)) return { ok: false, error: "Username must be 3–20 letters, numbers or underscores." };
     const issues = passwordProblems(password);
@@ -320,7 +320,7 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
     const sb = getSupabaseBrowser();
     if (sb) {
       // Preferred: server creates a confirmed account and signs in (no email round-trip).
-      const res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, username, password, displayName }) });
+      const res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, username, password, displayName, referralCode }) });
       if (res.status !== 501) {
         const json = await res.json().catch(() => ({}));
         if (!res.ok) return { ok: false, error: json.error ?? "Couldn't create your account." };
@@ -337,6 +337,7 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
       });
       if (error) return { ok: false, error: error.message };
       if (!data.session) return { ok: true, message: "Check your email to confirm your account, then sign in." };
+      if (process.env.NEXT_PUBLIC_REFERRALS_ENABLED === "true" && referralCode) await sb.rpc("referral_attribute", { p_code: referralCode });
       return { ok: true };
     }
     const accounts = read<StoredAccount[]>(K.accounts, []);

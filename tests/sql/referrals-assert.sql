@@ -1,4 +1,4 @@
-do $$declare v_data jsonb;v_seen uuid;begin
+do $$declare v_data jsonb;v_seen uuid;i integer;begin
  if (select count(*) from public.referral_rewards)<>2 then raise exception 'concurrent duplicate/missing reward'; end if;
  if (select count(*) from public.referral_reward_members)<>40 then raise exception 'reward grouping not exactly40'; end if;
  if (select sum(value_cents) from public.referral_rewards)<>2000 then raise exception 'wrong reward value';end if;
@@ -18,5 +18,14 @@ do $$declare v_data jsonb;v_seen uuid;begin
  delete from public.profiles where id=md5('learner-40')::uuid;
  if not exists(select 1 from public.referral_first_payments where user_id=md5('learner-40')::uuid) then raise exception 'payment marker deleted';end if;
  if exists(select 1 from public.referral_profiles where user_id=md5('learner-40')::uuid) then raise exception 'deleted share link retained';end if;
+-- Owner immediate policy applies to new payments, with reward settlement in the payment transaction.
+ update public.referral_policy set hold_days=0;
+ for i in 43..62 loop
+  insert into public.profiles values(md5('learner-'||i)::uuid);
+  perform set_config('request.jwt.claim.sub',md5('learner-'||i)::uuid::text,false);
+  perform public.referral_attribute((select code from public.referral_profiles where user_id=md5('referrer')::uuid));
+  perform public.referral_record_first_payment(md5('learner-'||i)::uuid,'session-'||i,'customer-'||i,100,'usd',now());
+ end loop;
+ if(select count(*) from public.referral_rewards)<>3 then raise exception 'immediate paid-event cohort not issued';end if;
 end$$;
 select 'PASS: concurrent repeat milestones, replay, hold, reversals, role/identity isolation';

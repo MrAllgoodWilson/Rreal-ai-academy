@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { AlertTriangle, ArrowRight, Brain, Clapperboard, Flame, FlaskConical, Mic, Snowflake, Sparkles, Zap } from "lucide-react";
+import { ReferralPanel } from "@/components/ReferralPanel";
 import { RequireMember } from "@/components/RequireAuth";
 import { useI18n } from "@/lib/i18n";
 import { ProgressBar, ProgressRing } from "@/components/ui/ProgressRing";
@@ -86,6 +87,7 @@ function Dashboard() {
       )}
 
 
+      {process.env.NEXT_PUBLIC_REFERRALS_ENABLED === "true" && <div className="mb-6"><ReferralPanel /></div>}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Continue */}
         <section className="card relative overflow-hidden lg:col-span-2" aria-labelledby="continue-title">

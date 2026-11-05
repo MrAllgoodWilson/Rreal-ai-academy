@@ -6,7 +6,7 @@ create table public.referral_policy (
   id boolean primary key default true check (id),
   threshold integer not null default 20 check (threshold > 0),
   reward_cents integer not null default 1000 check (reward_cents > 0),
-  hold_days integer not null default 30 check (hold_days between 0 and 365),
+  hold_days integer not null default 0 check (hold_days between 0 and 365),
   version integer not null default 1 check (version > 0)
 );
 insert into public.referral_policy(id) values(true);
@@ -60,7 +60,7 @@ revoke all on public.referral_policy,public.referral_first_payments,public.refer
 -- The adapter must establish this is the learner's first settled monthly $1 subscription payment.
 create function public.referral_record_first_payment(p_user uuid,p_session text,p_customer text,p_amount integer,p_currency text,p_paid_at timestamptz)
 returns boolean language plpgsql security definer set search_path=public as $$
-declare v_hold integer;
+declare v_hold integer;v_ref uuid;
 begin
   if p_amount is distinct from 100 or p_currency is distinct from 'usd' or p_paid_at is null or p_paid_at > now() or coalesce(p_session,'')='' or coalesce(p_customer,'')='' then
     raise exception 'invalid qualifying payment';
@@ -73,6 +73,8 @@ begin
   values(p_user,p_session,p_customer,p_paid_at,p_paid_at+make_interval(days=>v_hold)) on conflict do nothing;
   if not found then return false; end if;
   insert into public.referral_profiles(user_id) values(p_user) on conflict do nothing;
+  select referrer_user into v_ref from public.referral_attributions where referred_user=p_user;
+  if v_ref is not null then perform public.referral_settle_rewards(v_ref);end if;
   return true;
 end $$;
 revoke all on function public.referral_record_first_payment(uuid,text,text,integer,text,timestamptz) from public,anon,authenticated;
@@ -106,6 +108,31 @@ end $$;
 revoke all on function public.referral_reverse_payment(text,text) from public,anon,authenticated;
 grant execute on function public.referral_reverse_payment(text,text) to service_role;
 
+-- Atomic paid-event reward issuance; dashboard reconciliation uses the same serialized function.
+create function public.referral_settle_rewards(p_referrer uuid)
+returns void language plpgsql security definer set search_path=public as $$
+declare v_policy public.referral_policy;v_ids uuid[];v_milestone integer;v_reward uuid;
+begin
+ perform 1 from public.referral_profiles where user_id=p_referrer for update;
+ if not found or not exists(select 1 from public.referral_first_payments where user_id=p_referrer and status='paid') then return;end if;
+ select * into strict v_policy from public.referral_policy where id;
+  -- Lock qualifying payments while grouping so a concurrent reversal cannot slip through.
+  loop
+    select array_agg(q.user_id) into v_ids from (
+      select fp.user_id from public.referral_first_payments fp join public.referral_attributions a on a.referred_user=fp.user_id
+      where a.referrer_user=p_referrer and fp.status='paid' and fp.qualified_at<=now()
+      and not exists(select 1 from public.referral_reward_members rm where rm.referred_user=fp.user_id)
+      order by fp.paid_at,fp.user_id limit v_policy.threshold for update of fp
+    ) q;
+    exit when coalesce(cardinality(v_ids),0)<v_policy.threshold;
+    select coalesce(max(milestone),0)+1 into v_milestone from public.referral_rewards where user_id=p_referrer;
+    insert into public.referral_rewards(user_id,milestone,value_cents,policy_version) values(p_referrer,v_milestone,v_policy.reward_cents,v_policy.version) returning id into v_reward;
+    insert into public.referral_reward_members(referred_user,reward_id) select unnest(v_ids),v_reward;
+  end loop;
+end $$;
+revoke all on function public.referral_settle_rewards(uuid) from public,anon,authenticated;
+grant execute on function public.referral_settle_rewards(uuid) to service_role;
+
 create function public.referral_dashboard()
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare v_uid uuid:=auth.uid();v_code text;v_policy public.referral_policy;v_ids uuid[];v_reward uuid;v_milestone integer;v_eligible integer;v_pending integer;
@@ -114,19 +141,7 @@ begin
   select code into v_code from public.referral_profiles where user_id=v_uid for update;
   select * into strict v_policy from public.referral_policy where id;
   if v_code is null or not exists(select 1 from public.referral_first_payments where user_id=v_uid and status='paid') then return jsonb_build_object('eligible',false,'threshold',v_policy.threshold,'rewardCents',v_policy.reward_cents,'holdDays',v_policy.hold_days); end if;
-  -- Lock qualifying payments while grouping so a concurrent reversal cannot slip through.
-  loop
-    select array_agg(q.user_id) into v_ids from (
-      select fp.user_id from public.referral_first_payments fp join public.referral_attributions a on a.referred_user=fp.user_id
-      where a.referrer_user=v_uid and fp.status='paid' and fp.qualified_at<=now()
-      and not exists(select 1 from public.referral_reward_members rm where rm.referred_user=fp.user_id)
-      order by fp.paid_at,fp.user_id limit v_policy.threshold for update of fp
-    ) q;
-    exit when coalesce(cardinality(v_ids),0)<v_policy.threshold;
-    select coalesce(max(milestone),0)+1 into v_milestone from public.referral_rewards where user_id=v_uid;
-    insert into public.referral_rewards(user_id,milestone,value_cents,policy_version) values(v_uid,v_milestone,v_policy.reward_cents,v_policy.version) returning id into v_reward;
-    insert into public.referral_reward_members(referred_user,reward_id) select unnest(v_ids),v_reward;
-  end loop;
+  perform public.referral_settle_rewards(v_uid);
   select count(*) into v_eligible from public.referral_attributions a join public.referral_first_payments fp on fp.user_id=a.referred_user where a.referrer_user=v_uid and fp.status='paid' and fp.qualified_at<=now();
   select count(*) into v_pending from public.referral_attributions a join public.referral_first_payments fp on fp.user_id=a.referred_user where a.referrer_user=v_uid and fp.status='paid' and fp.qualified_at>now();
   return jsonb_build_object('eligible',true,'code',v_code,'visits',(select visits from public.referral_profiles where user_id=v_uid),'signups',(select count(*) from public.referral_attributions where referrer_user=v_uid),'qualified',v_eligible,'pending',v_pending,'threshold',v_policy.threshold,'rewardCents',v_policy.reward_cents,'holdDays',v_policy.hold_days,

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Check, CreditCard, Loader2, ShieldCheck } from "lucide-react";
+import { capturePendingReferral } from "@/lib/referrals-client";
 import { RequireAuth } from "@/components/RequireAuth";
 import { FormAlert } from "@/components/AuthCard";
 import { useAcademy } from "@/lib/store";
@@ -60,6 +61,9 @@ function Subscribe() {
   const join = async () => {
     setBusy(true);
     setError("");
+    try { await capturePendingReferral(); } catch {
+      setError("We couldn't confirm your referral. Please retry before checkout."); setBusy(false); return;
+    }
     const res = await fetch("/api/stripe/checkout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ plan: "monthly" }) });
     if (res.status === 501) {
       startTrial("monthly"); // Demo mode only (no Supabase/Stripe configured)
