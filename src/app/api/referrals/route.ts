@@ -1,3 +1,4 @@
+import { sameOriginRequest } from "@/lib/same-origin";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import QRCode from "qrcode";
@@ -23,6 +24,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  if (!sameOriginRequest(req)) return NextResponse.json({ error: "Forbidden origin." }, { status: 403 });
   if (process.env.REFERRALS_ENABLED !== "true") return NextResponse.json({ error: "Referral launch is being prepared." }, { status: 503 });
   if (!rateLimit(`referral:${clientIp(req)}`, 10, 60_000).ok) return NextResponse.json({ error: "Try again later." }, { status: 429 });
   const parsed = z.discriminatedUnion("action", [

@@ -17,7 +17,7 @@ describe("disabled project-wallet foundation", () => {
     expect(m.admin).not.toHaveBeenCalled();
   });
   it("rejects client-supplied price and cost values", async () => {
-    const res = await POST(new Request("https://example.test/api/project-wallet/quote", { method: "POST", body: JSON.stringify({ feature: "website", credits: 1, maxProviderCostCents: 0 }) }));
+    const res = await POST(new Request("https://rrealaiacademy.app/api/project-wallet/quote", { method: "POST", headers: { origin: "https://rrealaiacademy.app", "content-type": "application/json" }, body: JSON.stringify({ feature: "website", credits: 1, maxProviderCostCents: 0 }) }));
     expect(res.status).toBe(400); expect(m.admin).not.toHaveBeenCalled();
   });
   it("rejects unknown, negative, zero or fractional cost estimates", () => {
