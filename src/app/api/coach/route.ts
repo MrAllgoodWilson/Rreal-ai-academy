@@ -4,7 +4,7 @@ import { offlineCoach, type CoachRequest } from "@/lib/coach-offline";
 import { callClaude } from "@/lib/claude";
 import { getLessonRef } from "@/lib/curriculum";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { getMember, takeQuota } from "@/lib/server-auth";
+import { getMember } from "@/lib/server-auth";
 import { readByok, ownsTextAi } from "@/lib/byok-server";
 
 const Body = z.object({
@@ -31,10 +31,8 @@ export async function POST(req: Request) {
   const byok = readByok(req);
   const who = await getMember({ requireSubscription: true });
   if ("error" in who) return who.error;
-  if (!who.demo && !ownsTextAi(byok)) {
-    const limited = await takeQuota(who.member, "coach");
-    if (limited) return limited;
-  }
+  // No Academy-funded model call until prepaid reservations and cost caps are wired.
+  if (who.demo || !ownsTextAi(byok)) return NextResponse.json(offlineCoach(body as CoachRequest));
 
   // Quiz mode uses the curriculum's verified answer key, so it stays deterministic.
   if (body.mode !== "quiz") {

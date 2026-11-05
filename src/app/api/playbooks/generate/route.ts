@@ -1,8 +1,9 @@
+import { unfundedExecution } from "@/lib/execution-policy";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { callClaude } from "@/lib/claude";
 import { PLAYBOOK_SYSTEM_PROMPT, PlaybookSchema } from "@/lib/playbook-schema";
-import { getMember, takeQuota } from "@/lib/server-auth";
+import { getMember } from "@/lib/server-auth";
 import { readByok, ownsTextAi } from "@/lib/byok-server";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
@@ -16,10 +17,8 @@ export async function POST(req: Request) {
   const who = await getMember({ requireSubscription: true });
   if ("error" in who) return who.error;
   const byok = readByok(req);
-  if (!who.demo && !ownsTextAi(byok)) {
-    const limited = await takeQuota(who.member, "playbook");
-    if (limited) return limited;
-  }
+  if (who.demo || !ownsTextAi(byok)) return unfundedExecution("playbook");
+
   const raw = await callClaude({
     system: PLAYBOOK_SYSTEM_PROMPT,
     messages: [{ role: "user", content: `I want to create: """${parsed.data.request}"""\nWrite it in ${parsed.data.language === "es" ? "Latin American Spanish" : "English"}.` }],
