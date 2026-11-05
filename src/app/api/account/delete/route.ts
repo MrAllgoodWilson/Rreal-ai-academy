@@ -28,6 +28,14 @@ export async function POST(req: Request) {
   if (subErr) return unavailable();
   if (live) return NextResponse.json({ error: "Please cancel your membership first (Settings → Plan & billing), or email support@rrealaiacademy.app and we'll cancel and delete for you.", code: "cancel_first" }, { status: 409 });
 
+  // Funded feature history must be reconciled before profile deletion. Disabled
+  // deployments must not query a migration that has not been released yet.
+  if (process.env.PROJECT_WALLET_ENABLED === "true") {
+    const { data: closure, error: closureError } = await admin.rpc("project_wallet_account_closure_status", { p_user: user.id });
+    if (closureError || !closure || typeof closure.blocked !== "boolean") return unavailable();
+    if (closure.blocked) return NextResponse.json({ error: "Your feature allowances or usage history need account-closure reconciliation. Please contact support@rrealaiacademy.app before deleting. Nothing was deleted.", code: "feature_history_requires_reconciliation" }, { status: 409 });
+  }
+
   const { data: published, error: pubErr } = await admin.from("custom_courses").select("id").eq("owner_id", user.id).eq("status", "published");
   if (pubErr) return unavailable();
   if (published?.length) {
