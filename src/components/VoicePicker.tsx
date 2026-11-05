@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Play, Square } from "lucide-react";
 import { useA11y } from "@/lib/a11y";
 import { useI18n } from "@/lib/i18n";
@@ -36,33 +36,50 @@ export function VoicePicker() {
   const premium = useMemo(() => [...CLOUD_VOICES.filter((v) => v.lang === lang), ...(eleven ? PREMIUM_VOICES : [])].filter((v) => gender === "all" || v.gender === gender), [gender, lang, eleven]);
   const devices = useMemo(() => device.filter((v) => gender === "all" || guessGender(v.name) === gender), [device, gender]);
 
-  const stop = () => {
+  const previewAudio = useRef<{ audio: HTMLAudioElement; url: string } | null>(null);
+  const previewRequest = useRef(0);
+  const [previewError, setPreviewError] = useState("");
+  const stop = useCallback(() => {
+    previewRequest.current++;
     window.speechSynthesis?.cancel();
-    document.querySelectorAll<HTMLAudioElement>("audio[data-voice-preview]").forEach((a) => a.pause());
+    const current = previewAudio.current;
+    if (current) {
+      current.audio.onended = null; current.audio.onerror = null;
+      current.audio.pause(); URL.revokeObjectURL(current.url); previewAudio.current = null;
+    }
     setPlaying(null);
-  };
+  }, []);
+  useEffect(() => () => stop(), [stop]);
 
   const previewPremium = async (id: string) => {
-    stop();
+    stop(); setPreviewError("");
+    const requestId = previewRequest.current;
     setPlaying(id);
-    const res = await fetch("/api/tts", { method: "POST", headers: apiHeaders(), body: JSON.stringify({ text: SAMPLE[lang], voiceId: id, lang }) }).catch(() => null);
-    if (res?.ok && res.headers.get("content-type")?.includes("audio")) {
-      const a = new Audio(URL.createObjectURL(await res.blob()));
-      a.dataset.voicePreview = "1";
-      a.onended = () => setPlaying(null);
-      a.play();
-    } else setPlaying(null);
+    let createdUrl: string | null = null;
+    try {
+      const res = await fetch("/api/tts", { method: "POST", headers: apiHeaders(), body: JSON.stringify({ text: SAMPLE[lang], voiceId: id, lang }) });
+      if (requestId !== previewRequest.current) return;
+      if (!res.ok || !res.headers.get("content-type")?.includes("audio")) throw new Error("Voice unavailable");
+      const url = URL.createObjectURL(await res.blob()); createdUrl = url;
+      if (requestId !== previewRequest.current) { URL.revokeObjectURL(url); return; }
+      const audio = new Audio(url); previewAudio.current = { audio, url };
+      audio.onended = () => { if (requestId === previewRequest.current) stop(); };
+      audio.onerror = () => { if (requestId === previewRequest.current) { stop(); setPreviewError(lang === "es" ? "La voz seleccionada no está disponible." : "The selected voice is unavailable."); } };
+      await audio.play();
+    } catch {
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+      if (requestId === previewRequest.current) { stop(); setPreviewError(lang === "es" ? "La voz seleccionada no está disponible. No cambiamos de voz." : "The selected voice is unavailable. We have not switched voices."); }
+    }
   };
 
   const previewDevice = (v: SpeechSynthesisVoice) => {
-    stop();
+    stop(); setPreviewError("");
+    const requestId = previewRequest.current;
     const u = new SpeechSynthesisUtterance(SAMPLE[lang]);
-    u.voice = v;
-    u.rate = prefs.voiceRate;
-    u.pitch = prefs.voicePitch;
-    u.onend = () => setPlaying(null);
-    setPlaying(v.name);
-    window.speechSynthesis.speak(u);
+    u.voice = v; u.rate = prefs.voiceRate; u.pitch = prefs.voicePitch;
+    u.onend = () => { if (requestId === previewRequest.current) setPlaying(null); };
+    u.onerror = () => { if (requestId === previewRequest.current) { setPlaying(null); setPreviewError(lang === "es" ? "La voz del dispositivo no está disponible." : "The device voice is unavailable."); } };
+    setPlaying(v.name); window.speechSynthesis.speak(u);
   };
 
   const row = (selected: boolean) => `flex items-center justify-between gap-3 rounded-xl border p-3 ${selected ? "border-neon bg-neon/10" : "border-line"}`;
@@ -71,17 +88,16 @@ export function VoicePicker() {
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Voice source">
         {(["premium", "device"] as const).map((p) => (
-          <button key={p} type="button" role="radio" aria-checked={prefs.voiceProvider === p} onClick={() => setPref("voiceProvider", p)} className={`chip min-h-[40px] px-4 text-sm ${prefs.voiceProvider === p ? "border-neon text-ink" : ""}`}>
-            {p === "premium" ? "Premium voices" : "Device voices (offline)"}
+          <button key={p} type="button" role="radio" aria-checked={prefs.voiceProvider === p} onClick={() => setPref("voiceProvider", p)} className={`chip min-h-[44px] px-4 text-sm ${prefs.voiceProvider === p ? "border-neon text-ink" : ""}`}>
+            {p === "premium" ? (lang === "es" ? "Voces en la nube" : "Cloud voices") : (lang === "es" ? "Voces del dispositivo" : "Device voices")}
           </button>
         ))}
       </div>
-      {prefs.voiceProvider === "premium" && !eleven && (
-        <p className="text-sm text-muted">{lang === "es" ? "Estas voces están incluidas en tu membresía. Conecta tu cuenta de ElevenLabs en Ajustes para 12 voces más." : "These voices are included with your membership. Connect your ElevenLabs account in Settings → Your AI accounts for 12 more."}</p>
-      )}
+      <p className="text-sm text-muted">{prefs.voiceProvider === "device" ? (lang === "es" ? "Estas voces usan tu navegador o sistema, sin llamar a la API de voz de Rreal. La disponibilidad y el uso sin conexión dependen del dispositivo." : "These voices use your browser or operating system without calling Rreal's speech API. Availability and offline support depend on your device.") : (lang === "es" ? "Las voces en la nube requieren ejecución pagada compatible cuando esté disponible, o tu propia clave de API de ElevenLabs. Una clave propia puede generar cargos del proveedor." : "Cloud voices require supported paid execution when available, or your own ElevenLabs API key. Your own key may incur provider charges.")}</p>
+      {previewError && <p className="text-sm text-muted" role="status">{previewError}</p>}
       <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Voice gender">
         {(["all", "female", "male", "neutral"] as const).map((g) => (
-          <button key={g} type="button" role="radio" aria-checked={gender === g} onClick={() => setGender(g)} className={`chip min-h-[36px] px-3 capitalize ${gender === g ? "border-violet text-ink" : ""}`}>
+          <button key={g} type="button" role="radio" aria-checked={gender === g} onClick={() => setGender(g)} className={`chip min-h-[44px] px-3 capitalize ${gender === g ? "border-violet text-ink" : ""}`}>
             {g}
           </button>
         ))}

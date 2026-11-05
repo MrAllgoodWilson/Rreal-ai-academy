@@ -87,7 +87,7 @@ function Waveform({ stream, speaking }: { stream: MediaStream | null; speaking: 
 }
 
 export function VoiceCoach({ lessonId }: { lessonId?: string }) {
-  const { prefs, announce } = useA11y();
+  const { prefs, announce, setPref } = useA11y();
   const { lang } = useI18n();
   const { bump, progress } = useAcademy();
   const [showVoices, setShowVoices] = useState(false);
@@ -295,6 +295,7 @@ export function VoiceCoach({ lessonId }: { lessonId?: string }) {
           <Waveform stream={stream} speaking={speaking} />
           {voiceNotice && <div className="mb-3 rounded-xl border border-line p-3">
             <p role="status" className="text-sm text-muted">{voiceNotice}</p>
+            {prefs.voiceProvider !== "device" && <button type="button" className="btn-ghost mt-2 min-h-[44px]" onClick={() => { stopVoice(); setPref("voiceProvider", "device"); setVoiceOn(true); setVoiceNotice(lang === "es" ? "Elegiste la voz del dispositivo. Puede sonar distinta. Reintenta para escuchar; no se usa la API de voz de Rreal." : "You selected your device voice. It may sound different. Retry to listen; this does not use Rreal's speech API."); }}>{lang === "es" ? "Elegir voz del dispositivo" : "Choose my device voice"}</button>}
             <button type="button" className="btn-ghost mt-2 min-h-[44px]" onClick={() => say(retryText.current)}>{lang === "es" ? "Reintentar voz" : "Retry selected voice"}</button>
           </div>}
           {/* Live captions — synchronized for deaf & hard-of-hearing learners */}
