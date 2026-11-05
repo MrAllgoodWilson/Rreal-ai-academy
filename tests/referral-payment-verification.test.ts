@@ -23,7 +23,7 @@ beforeEach(() => {
   session = { id: "cs_first", mode: "subscription", payment_status: "paid", amount_total: 100, currency: "usd", livemode: false, client_reference_id: user, subscription: "sub_first", customer: "cus_first", invoice: "in_first" };
   sub = { id: "sub_first", customer: "cus_first", livemode: false, metadata: { user_id: user, app: "rreal-ai-academy" }, items: { data: [{ quantity: 1, price: { id: "price_monthly", unit_amount: 100, currency: "usd", recurring: { interval: "month" } } }] } };
   invoice = { id: "in_first", subscription: "sub_first", customer: "cus_first", charge: "ch_first", billing_reason: "subscription_create", paid: true, amount_paid: 100, currency: "usd", status_transitions: { paid_at: 1_700_000_000 } };
-  charge = { id: "ch_first", invoice: "in_first", customer: "cus_first", amount: 100, currency: "usd", livemode: false, paid: true, amount_refunded: 0, disputed: false };
+  charge = { id: "ch_first", invoice: "in_first", customer: "cus_first", amount: 100, currency: "usd", livemode: false, paid: true, captured: true, amount_captured: 100, amount_refunded: 0, disputed: false };
   stripe.accounts.retrieve.mockResolvedValue({ id: "acct_verified" });
   stripe.checkout.sessions.retrieve.mockImplementation(async () => session);
   stripe.checkout.sessions.listLineItems.mockResolvedValue({ data: [{ quantity: 1, price: { id: "price_monthly" } }], has_more: false });
@@ -45,6 +45,12 @@ describe("server-authoritative referral qualification", () => {
   it("binds exact paid monthly price, verified account and trusted owner before qualifying", async () => {
     await run(); expect(rpc).toHaveBeenCalledWith("referral_record_first_payment", { p_user: user, p_session: "cs_first", p_customer: "cus_first", p_amount: 100, p_currency: "usd", p_paid_at: "2023-11-14T22:13:20.000Z" });
     expect(records[0]).toMatchObject({ state: "completed" });
+  });
+  it("does not award for an authorization or partial capture", async () => {
+    charge.captured = false; charge.amount_captured = 0;
+    await run(); expect(rpc).not.toHaveBeenCalled(); expect(records[0]).toMatchObject({ state: "pending", reason: "payment_not_fully_captured" });
+    charge.captured = true; charge.amount_captured = 99;
+    await run(); expect(rpc).not.toHaveBeenCalled();
   });
   it("does not trust a Payment Link client_reference_id without server-owned subscription metadata", async () => {
     sub.metadata = {}; await run(); expect(rpc).not.toHaveBeenCalled(); expect(records[0]).toMatchObject({ state: "pending", reason: "trusted_owner_binding_missing" });

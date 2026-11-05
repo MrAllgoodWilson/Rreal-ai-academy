@@ -75,6 +75,8 @@ export async function processReferralPaymentEvent(event: Stripe.Event, admin: Ad
     if (!paidChargeId) throw new ProofError("settled_charge_mapping_missing");
     const paidCharge = await stripe.charges.retrieve(paidChargeId);
     if (paidCharge.livemode !== event.livemode || !paidCharge.paid || paidCharge.amount !== 100 || paidCharge.currency !== "usd" || idOf(paidCharge.customer) !== customerId) throw new ProofError("settled_charge_unverified", true);
+    // Stripe paid=true can mean authorization only, not a captured payment.
+    if (!paidCharge.captured || paidCharge.amount_captured !== 100) throw new ProofError("payment_not_fully_captured");
     if (!reversal && (paidCharge.amount_refunded > 0 || paidCharge.disputed)) throw new ProofError("initial_payment_already_reversed", true);
     if (reversal) {
       const { error } = await admin.rpc("referral_reverse_payment", { p_session: session.id, p_status: reversal });
