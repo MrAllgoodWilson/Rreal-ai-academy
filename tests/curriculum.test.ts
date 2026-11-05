@@ -110,9 +110,9 @@ describe("gating", () => {
 });
 
 describe("catalog", () => {
-  it("has 14 standalone courses spanning all 5 levels", () => {
+  it("has 15 standalone courses spanning all 5 levels", () => {
     const courses = ALL_TRACKS.filter((t) => t.kind === "course");
-    expect(courses.length).toBe(14);
+    expect(courses.length).toBe(15);
     expect(new Set(courses.map((c) => c.level))).toEqual(new Set([1, 2, 3, 4, 5]));
   });
   it("playbooks list tools and steps", () => {

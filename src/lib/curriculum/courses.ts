@@ -581,4 +581,750 @@ export const COURSES: Track[] = [
       ]),
     ],
   }),
+
+  // Reviewed 2026-11-05. Device/version provenance: docs/SMARTPHONE_MAINTENANCE.md.
+  {
+    "id": "c-smartphone-foundations",
+    "kind": "course",
+    "category": "foundations",
+    "language": "en",
+    "level": 1,
+    "stage": "Dummy",
+    "name": "Smartphone Confidence: iPhone and Android Essentials",
+    "tagline": "Learn the essentials safely, then find the right guide for your phone.",
+    "outcome": "Navigate and maintain a smartphone, protect personal information, use accessibility tools and check current device-specific guidance.",
+    "gradient": "from-cyan-400 to-sky-500",
+    "emoji": "📱",
+    "certificateTitle": "Rreal Course Completion: Smartphone Confidence",
+    "weeks": [
+      {
+        "number": 1,
+        "title": "Meet Your Phone and Find the Right Guide",
+        "modules": [
+          {
+            "id": "c-smartphone-foundations-w1-m1",
+            "title": "Meet Your Phone and Find the Right Guide",
+            "description": "Safe hands-on and written practice; no optional cloud execution required.",
+            "lessons": [
+              {
+                "id": "phone-identify",
+                "title": "Meet Your Phone and Find the Right Guide",
+                "minutes": 8,
+                "xp": 60,
+                "summary": "Record your phone family and software version without exposing private identifiers.",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "heading": "Start here",
+                    "body": "Begin with the phone you actually own. iPhone uses iOS; Android is a family used by manufacturers including Google and Samsung. A Samsung Galaxy can have both an Android version and a One UI version. Similar-looking phones can have different buttons, features and update support. A guide for another model is a clue, not proof that your phone has the same option."
+                  },
+                  {
+                    "type": "keypoints",
+                    "heading": "Try it safely",
+                    "items": [
+                      "Open Settings and use its search field to look for About or Software information.",
+                      "On many Android phones, About phone → Android version shows version information; labels can vary.",
+                      "Privately note brand, model name, software version and preferred language. Do not record IMEI, serial number, phone number or account credentials in a course exercise.",
+                      "Choose the manufacturer guide for that model/version; ask a trusted helper if you cannot identify it."
+                    ]
+                  },
+                  {
+                    "type": "example",
+                    "label": "Fictional practice",
+                    "good": "Fictional device card: Samsung Galaxy, model name from About phone, Android version recorded locally, One UI version recorded locally, English. Private identifiers are deliberately omitted."
+                  },
+                  {
+                    "type": "quiz",
+                    "id": "phone-identify-q1",
+                    "question": "Which information is useful for choosing instructions without exposing private identifiers?",
+                    "options": [
+                      "Your password and recovery code",
+                      "Your IMEI and bank login",
+                      "Brand, model name and software version",
+                      "A photograph of every account page"
+                    ],
+                    "answer": 2,
+                    "explanation": "Model and version help match instructions; secrets and unique identifiers are unnecessary."
+                  },
+                  {
+                    "type": "prompt-lab",
+                    "goal": "Write a five-step beginner checklist for identifying a fictional phone. Include model and software version, a manufacturer-help link placeholder, and a warning not to share passwords, IMEI or serial numbers.",
+                    "starter": "Write your plan locally; no paid generation is required.",
+                    "minScore": 65
+                  },
+                  {
+                    "type": "tip",
+                    "body": "If a menu is missing, stop and consult that model’s guide. Do not install a tool just to make a lesson screenshot match."
+                  }
+                ]
+              },
+              {
+                "id": "phone-navigation",
+                "title": "Tap, Swipe, Type and Find Your Way Back",
+                "minutes": 9,
+                "xp": 60,
+                "summary": "Practice basic navigation with harmless sample text.",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "heading": "Start here",
+                    "body": "Tap selects an item; a swipe moves through a page or changes a view; touching and holding may open extra choices. Navigation can use gestures, on-screen buttons or physical buttons. Learn Home, Back where available, and the app switcher from your model’s help. Screen-reader gestures differ, so use the accessibility lesson before practicing unfamiliar gestures with a screen reader enabled."
+                  },
+                  {
+                    "type": "keypoints",
+                    "heading": "Try it safely",
+                    "items": [
+                      "Use a harmless note, not a banking or account-security screen.",
+                      "Type a short fictional shopping list, move the cursor and correct one word.",
+                      "Practice returning Home, reopening the note and finding Settings.",
+                      "If a gesture does something unexpected, pause; do not repeatedly tap an unknown confirmation."
+                    ]
+                  },
+                  {
+                    "type": "example",
+                    "label": "Fictional practice",
+                    "good": "Practice note: Apples, rice, soap. Change rice to beans, then return Home and reopen the note. Nothing needs to be sent, purchased or shared."
+                  },
+                  {
+                    "type": "quiz",
+                    "id": "phone-navigation-q1",
+                    "question": "What is a safe place to practice typing and navigation?",
+                    "options": [
+                      "A fictional note with no sensitive information",
+                      "A password reset form",
+                      "A payment approval screen",
+                      "An emergency-call countdown"
+                    ],
+                    "answer": 0,
+                    "explanation": "A harmless note lets you make and undo small mistakes without sending information or triggering a transaction."
+                  },
+                  {
+                    "type": "prompt-lab",
+                    "goal": "Design a fictional phone-navigation practice task with a three-item list. Include returning Home, reopening the note and a stop rule for unexpected confirmation screens. Do not require an account or purchase.",
+                    "starter": "Write your plan locally; no paid generation is required.",
+                    "minScore": 65
+                  },
+                  {
+                    "type": "tip",
+                    "body": "Keyboard layout, gesture shortcuts and available buttons vary. Use your phone’s built-in help instead of memorizing another person’s exact screen."
+                  }
+                ]
+              },
+              {
+                "id": "phone-connections",
+                "title": "Understand Wi-Fi, Mobile Data and Bluetooth",
+                "minutes": 10,
+                "xp": 70,
+                "summary": "Choose a connection for a task and recognize possible carrier costs.",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "heading": "Start here",
+                    "body": "Wi-Fi connects through a nearby network; mobile data uses a carrier connection; Bluetooth pairs nearby accessories. Being connected does not make a website trustworthy. Mobile data, roaming, hotspot use and calls can have plan-specific charges. Airplane mode changes wireless behavior, and you should not assume that every safety or communication feature will work in that mode."
+                  },
+                  {
+                    "type": "keypoints",
+                    "heading": "Try it safely",
+                    "items": [
+                      "Identify the Wi-Fi and mobile-data indicators using the model guide.",
+                      "Review the name of a network before joining; do not use a surprise captive portal to enter account secrets.",
+                      "Pair only an accessory you control, and check the name and any matching code shown on both devices.",
+                      "Before travel or hotspot use, check the actual carrier plan rather than relying on an AI estimate."
+                    ]
+                  },
+                  {
+                    "type": "example",
+                    "label": "Fictional practice",
+                    "good": "Fictional choice: Downloading a large practice file can wait until a known home network is available. A learner checks the carrier plan instead of assuming roaming is free."
+                  },
+                  {
+                    "type": "quiz",
+                    "id": "phone-connections-q1",
+                    "question": "What should you check before using mobile data abroad?",
+                    "options": [
+                      "Whether the wallpaper is dark",
+                      "Your carrier plan and roaming charges",
+                      "The number of apps on Home",
+                      "Whether someone else used it free"
+                    ],
+                    "answer": 1,
+                    "explanation": "Carrier terms determine the applicable service charges; another person’s plan does not establish yours."
+                  },
+                  {
+                    "type": "prompt-lab",
+                    "goal": "Create a comparison table for Wi-Fi, mobile data and Bluetooth using fictional situations. Mark carrier prices unknown, list what the learner should verify and avoid requesting network passwords.",
+                    "starter": "Write your plan locally; no paid generation is required.",
+                    "minScore": 65
+                  },
+                  {
+                    "type": "tip",
+                    "body": "Do not pair your phone with a stranger’s accessory to finish this exercise. You can complete it as a written scenario."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "title": "Calls, Contacts, Messages and Notifications",
+        "modules": [
+          {
+            "id": "c-smartphone-foundations-w2-m1",
+            "title": "Calls, Contacts, Messages and Notifications",
+            "description": "Safe hands-on and written practice; no optional cloud execution required.",
+            "lessons": [
+              {
+                "id": "phone-communication",
+                "title": "Calls, Contacts, Messages and Notifications",
+                "minutes": 9,
+                "xp": 70,
+                "summary": "Manage ordinary communication without sending private practice data.",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "heading": "Start here",
+                    "body": "Phone calls, text messages, internet messaging and video calls may use different apps and services. A message’s appearance does not prove who sent it. Notifications can show private content on a locked screen. Learn how your device controls notification previews, sound and quiet modes, while recognizing that blocking or silencing settings may affect messages you expect."
+                  },
+                  {
+                    "type": "keypoints",
+                    "heading": "Try it safely",
+                    "items": [
+                      "Create a fictional contact card in a worksheet; do not call a real person as a required lesson step.",
+                      "Draft a short message without sending it, and check the recipient field.",
+                      "Find notification settings for one harmless app and inspect the available options before changing them.",
+                      "Distinguish a draft from a sent message; a course cannot guarantee message delivery."
+                    ]
+                  },
+                  {
+                    "type": "example",
+                    "label": "Fictional practice",
+                    "good": "Fictional draft: Hi Jordan, is Saturday afternoon suitable for the book-club meeting? The learner checks the recipient and leaves it unsent."
+                  },
+                  {
+                    "type": "quiz",
+                    "id": "phone-communication-q1",
+                    "question": "What should you do before sending a message?",
+                    "options": [
+                      "Trust the first suggested recipient",
+                      "Include a login code to prove identity",
+                      "Check recipient, content and any attachment",
+                      "Forward it to every contact"
+                    ],
+                    "answer": 2,
+                    "explanation": "Review helps prevent accidental disclosure or sending a message to the wrong person."
+                  },
+                  {
+                    "type": "prompt-lab",
+                    "goal": "Write a safe message-review checklist for a fictional event invitation. Include recipient, attachment and notification-privacy checks. The exercise must not require sending the message or uploading contacts.",
+                    "starter": "Write your plan locally; no paid generation is required.",
+                    "minScore": 65
+                  },
+                  {
+                    "type": "tip",
+                    "body": "If someone asks for a one-time login code, stop. Do not share that code with a person claiming to be support."
+                  }
+                ]
+              },
+              {
+                "id": "phone-accessibility",
+                "title": "Make the Phone Easier to See, Hear and Control",
+                "minutes": 11,
+                "xp": 80,
+                "summary": "Choose accessibility options and plan a safe way to undo changes.",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "heading": "Start here",
+                    "body": "Accessibility tools can support vision, hearing, movement and comprehension. Depending on the device, examples include larger text, magnification, captions, touch adjustments and screen readers. Apple offers VoiceOver and other accessibility features. Android’s selected-text reading tools can read supported text; they are not a promise that every screen or app can be read."
+                  },
+                  {
+                    "type": "keypoints",
+                    "heading": "Try it safely",
+                    "items": [
+                      "Identify your goal first: larger text, less motion, captions, spoken text or an alternative input method.",
+                      "Read the manufacturer instructions and locate the way to stop or undo the feature before enabling it.",
+                      "Change one setting at a time and check a familiar screen.",
+                      "If trying a screen reader for the first time, learn its gestures with a trusted helper; ordinary tapping behavior may change."
+                    ]
+                  },
+                  {
+                    "type": "example",
+                    "label": "Fictional practice",
+                    "good": "Fictional learner goal: Read a recipe more comfortably. First try the device’s text-size controls, compare the result, and keep a written undo path. There is no need to buy cloud speech to complete the lesson."
+                  },
+                  {
+                    "type": "quiz",
+                    "id": "phone-accessibility-q1",
+                    "question": "What is the best first step before changing an unfamiliar accessibility control?",
+                    "options": [
+                      "Enable every option together",
+                      "Ask for someone else’s password",
+                      "Buy the most expensive app",
+                      "Learn its purpose and how to undo it"
+                    ],
+                    "answer": 3,
+                    "explanation": "A deliberate one-setting-at-a-time change makes it easier to understand the effect and recover if needed."
+                  },
+                  {
+                    "type": "prompt-lab",
+                    "goal": "Create a fictional accessibility plan for someone who needs larger text and captions. Include a reversible one-change-at-a-time procedure, a manufacturer-guide check and a written alternative to spoken instructions.",
+                    "starter": "Write your plan locally; no paid generation is required.",
+                    "minScore": 65
+                  },
+                  {
+                    "type": "tip",
+                    "body": "Device speech may rely on installed voices, downloads or network services. Do not assume it works offline until you test that device; Rreal cloud speech is an optional paid service when available; check its current availability and quote."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "title": "Photos, Video and Sharing With Consent",
+        "modules": [
+          {
+            "id": "c-smartphone-foundations-w3-m1",
+            "title": "Photos, Video and Sharing With Consent",
+            "description": "Safe hands-on and written practice; no optional cloud execution required.",
+            "lessons": [
+              {
+                "id": "phone-camera",
+                "title": "Photos, Video and Sharing With Consent",
+                "minutes": 10,
+                "xp": 80,
+                "summary": "Capture and review a harmless image while protecting other people’s privacy.",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "heading": "Start here",
+                    "body": "Camera controls and available modes depend on hardware and software. Practice framing, light and focus using an ordinary object you own. Before sharing, inspect what appears in the image, who is visible, the destination and available location information. A private album and a public post are different destinations; deleting a local file does not guarantee that every shared copy disappears."
+                  },
+                  {
+                    "type": "keypoints",
+                    "heading": "Try it safely",
+                    "items": [
+                      "Use an object such as a mug; avoid faces, identity documents, screens, addresses and vehicle plates.",
+                      "Check the camera mode and preview before recording.",
+                      "Review a sample image and crop accidental private details before sharing; keep this exercise local.",
+                      "For video, include accurate captions or a written description where appropriate. Get permission before recording or publishing someone else."
+                    ]
+                  },
+                  {
+                    "type": "example",
+                    "label": "Fictional practice",
+                    "good": "Practice project: Photograph an unbranded mug against a plain background. Review the edges for private information, then write a caption. No upload is required."
+                  },
+                  {
+                    "type": "quiz",
+                    "id": "phone-camera-q1",
+                    "question": "Which photo is safest for a beginner practice exercise?",
+                    "options": [
+                      "A clear image of a bank card",
+                      "An ordinary object with no private details or people",
+                      "A stranger’s child without permission",
+                      "A screen showing recovery codes"
+                    ],
+                    "answer": 1,
+                    "explanation": "An ordinary object supports the skill while avoiding unnecessary personal-data or consent risks."
+                  },
+                  {
+                    "type": "prompt-lab",
+                    "goal": "Write a six-shot plan for a fictional tutorial about organizing a desk. Exclude real names, faces and private documents. Add a consent check, caption plan and local-only review checklist.",
+                    "starter": "Write your plan locally; no paid generation is required.",
+                    "minScore": 65
+                  },
+                  {
+                    "type": "tip",
+                    "body": "iFilms Studios (https://ifilmsstudio.pics) is an optional place to explore for creator work. Check current terms and submission rules first; publication, revenue and acceptance are not guaranteed or required here."
+                  }
+                ]
+              },
+              {
+                "id": "phone-storage",
+                "title": "Files, Downloads, Storage and Backups",
+                "minutes": 11,
+                "xp": 80,
+                "summary": "Distinguish a file, a shared copy and a backup before removing anything.",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "heading": "Start here",
+                    "body": "A file can exist on the phone, in an app, in a cloud service or in more than one place. Synchronization and backup are not identical: a deletion may synchronize to another device or service. Android backups can include content and settings, but restoration varies by device and Android version. Do not assume every app or file is covered."
+                  },
+                  {
+                    "type": "keypoints",
+                    "heading": "Try it safely",
+                    "items": [
+                      "Locate one harmless practice file and identify which app or storage location holds it.",
+                      "Inspect storage usage before deleting anything; do not erase real personal files for this exercise.",
+                      "Privately check the selected backup account, last successful backup and what it includes.",
+                      "Make a separate verified copy of an important file before a destructive action; do not test recovery by erasing your phone."
+                    ]
+                  },
+                  {
+                    "type": "example",
+                    "label": "Fictional practice",
+                    "good": "Fictional storage map: recipe.txt is on the phone; a duplicate is on a trusted computer; a cloud folder is synchronized. The learner labels each location and does not delete any copy."
+                  },
+                  {
+                    "type": "quiz",
+                    "id": "phone-storage-q1",
+                    "question": "What should you establish before deleting a file you may need?",
+                    "options": [
+                      "That a usable independent copy or appropriate verified backup exists",
+                      "That the filename is short",
+                      "That someone once mentioned cloud storage",
+                      "That the phone has a new case"
+                    ],
+                    "answer": 0,
+                    "explanation": "A named, checked recovery copy is more useful than assuming that every cloud service backs up everything."
+                  },
+                  {
+                    "type": "prompt-lab",
+                    "goal": "Create a fictional file-and-backup inventory with columns for file, location, independent copy, last verification and unresolved questions. Do not ask for real account names, recovery keys or private documents.",
+                    "starter": "Write your plan locally; no paid generation is required.",
+                    "minScore": 65
+                  },
+                  {
+                    "type": "tip",
+                    "body": "Never reset, erase, uninstall an important app or delete personal photos to pass this lesson. A worksheet is a complete practice path."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "number": 4,
+        "title": "Apps, Permissions and Safer Installation",
+        "modules": [
+          {
+            "id": "c-smartphone-foundations-w4-m1",
+            "title": "Apps, Permissions and Safer Installation",
+            "description": "Safe hands-on and written practice; no optional cloud execution required.",
+            "lessons": [
+              {
+                "id": "phone-permissions",
+                "title": "Apps, Permissions and Safer Installation",
+                "minutes": 10,
+                "xp": 80,
+                "summary": "Review app access without granting permissions just to complete a lesson.",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "heading": "Start here",
+                    "body": "An app can request access to the camera, microphone, location or contacts. Permission should match the task. On Android, app permissions can be inspected through Settings → Apps → the chosen app → Permissions; labels and choices can vary. A permission request is a decision point, not a command that you must accept."
+                  },
+                  {
+                    "type": "keypoints",
+                    "heading": "Try it safely",
+                    "items": [
+                      "Inspect one familiar non-sensitive app’s permission list without changing it.",
+                      "Ask why that app needs each capability and whether a narrower available option fits.",
+                      "Use the device’s supported app source and verify the publisher rather than installing from an unexpected message.",
+                      "If a school or employer manages the phone, contact its administrator before changing managed restrictions."
+                    ]
+                  },
+                  {
+                    "type": "example",
+                    "label": "Fictional practice",
+                    "good": "Fictional request: A flashlight app asks for contacts. The learner pauses, checks the purpose and chooses not to grant unrelated access for the exercise."
+                  },
+                  {
+                    "type": "quiz",
+                    "id": "phone-permissions-q1",
+                    "question": "How should you respond to a permission that seems unrelated to an app’s task?",
+                    "options": [
+                      "Approve it automatically",
+                      "Give the app your password too",
+                      "Pause and verify the purpose; decline unnecessary access",
+                      "Disable every protection on the phone"
+                    ],
+                    "answer": 2,
+                    "explanation": "Access should be deliberate and proportionate to the task; a request alone is not a reason to grant it."
+                  },
+                  {
+                    "type": "prompt-lab",
+                    "goal": "Draft a permission-review checklist for a fictional notes app. Cover camera, microphone, contacts and location, with a question explaining why each might be needed. Include a stop rule for unrelated access.",
+                    "starter": "Write your plan locally; no paid generation is required.",
+                    "minScore": 65
+                  },
+                  {
+                    "type": "tip",
+                    "body": "Do not enable developer settings, sideload an unknown installer or bypass workplace restrictions as a course exercise."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "number": 5,
+        "title": "Updates, Battery and Sensible Troubleshooting",
+        "modules": [
+          {
+            "id": "c-smartphone-foundations-w5-m1",
+            "title": "Updates, Battery and Sensible Troubleshooting",
+            "description": "Safe hands-on and written practice; no optional cloud execution required.",
+            "lessons": [
+              {
+                "id": "phone-updates",
+                "title": "Updates, Battery and Sensible Troubleshooting",
+                "minutes": 11,
+                "xp": 80,
+                "summary": "Check official update guidance and choose a low-risk troubleshooting step.",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "heading": "Start here",
+                    "body": "Software updates can fix issues, change screens and add supported features. The newest release is not available to every model at the same time. Galaxy update menus can differ by model, carrier and software version. Before an update, follow the manufacturer’s power, network, storage and backup guidance; allow time when you do not need the phone for urgent calls."
+                  },
+                  {
+                    "type": "keypoints",
+                    "heading": "Try it safely",
+                    "items": [
+                      "Record the current version and check updates through the phone’s official settings.",
+                      "Read the release notes and compatibility notes; do not follow an unsolicited download link.",
+                      "For a minor issue, record the symptom and consult the manufacturer’s basic troubleshooting before escalating.",
+                      "Do not factory-reset, flash firmware or replace a battery to complete this lesson. Seek qualified help for physical damage, swelling or unusual heat."
+                    ]
+                  },
+                  {
+                    "type": "example",
+                    "label": "Fictional practice",
+                    "good": "Fictional issue: A settings label moved after an update. The learner searches Settings, checks the version-specific official guide and records the new label instead of resetting the phone."
+                  },
+                  {
+                    "type": "quiz",
+                    "id": "phone-updates-q1",
+                    "question": "What is a sensible response when a lesson’s old menu path no longer matches?",
+                    "options": [
+                      "Erase the phone immediately",
+                      "Install an unofficial system image",
+                      "Assume the phone is broken",
+                      "Check model/version and current official instructions"
+                    ],
+                    "answer": 3,
+                    "explanation": "An interface change can explain a mismatch; checking current supported guidance is safer than destructive troubleshooting."
+                  },
+                  {
+                    "type": "prompt-lab",
+                    "goal": "Build a fictional update-readiness checklist that checks manufacturer instructions, backup, power, storage, network and time availability. Add a non-destructive response to a moved settings menu.",
+                    "starter": "Write your plan locally; no paid generation is required.",
+                    "minScore": 65
+                  },
+                  {
+                    "type": "tip",
+                    "body": "An update may temporarily prevent ordinary and emergency calls. Plan ahead; this course does not guarantee availability or uninterrupted service."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "number": 6,
+        "title": "Recognize Scams and Prepare for Emergencies",
+        "modules": [
+          {
+            "id": "c-smartphone-foundations-w6-m1",
+            "title": "Recognize Scams and Prepare for Emergencies",
+            "description": "Safe hands-on and written practice; no optional cloud execution required.",
+            "lessons": [
+              {
+                "id": "phone-scams",
+                "title": "Recognize Scams and Prepare for Emergencies",
+                "minutes": 11,
+                "xp": 90,
+                "summary": "Use a stop-and-verify habit and inspect emergency help without triggering a call.",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "heading": "Start here",
+                    "body": "Scams can arrive by message, email, call, social post or QR code. Logos and urgent language are not identity checks. If a request asks for money, a password or a verification code, pause and independently open the known app or official site. Emergency tools vary by device, account, region and connectivity, so learn your phone’s supported options before you need them."
+                  },
+                  {
+                    "type": "keypoints",
+                    "heading": "Try it safely",
+                    "items": [
+                      "For a suspicious message, do not use its link or phone number to verify the claim.",
+                      "Find the organization’s contact path independently using a source you already trust.",
+                      "Review the manufacturer’s emergency-help instructions without activating a countdown or placing a test emergency call.",
+                      "Privately plan local emergency numbers and trusted contacts; do not publish medical information or another person’s details in course work."
+                    ]
+                  },
+                  {
+                    "type": "example",
+                    "label": "Fictional practice",
+                    "good": "Fictional text: Your phone account will close in ten minutes; send your code now. Safe response: stop, leave the message and check the account through the known official app."
+                  },
+                  {
+                    "type": "quiz",
+                    "id": "phone-scams-q1",
+                    "question": "How should you verify an urgent message asking for a login code?",
+                    "options": [
+                      "Reply with the code quickly",
+                      "Open the known official service independently",
+                      "Call the number in the suspicious message",
+                      "Scan the message’s QR code"
+                    ],
+                    "answer": 1,
+                    "explanation": "Independent verification avoids relying on the contact path supplied by the suspicious request."
+                  },
+                  {
+                    "type": "prompt-lab",
+                    "goal": "Write a stop-and-verify script for a fictional urgent support message. Include an independent contact path and a reminder not to send passwords or codes. Add an emergency-preparation step that never triggers a real call.",
+                    "starter": "Write your plan locally; no paid generation is required.",
+                    "minScore": 65
+                  },
+                  {
+                    "type": "tip",
+                    "body": "Do not test emergency-call buttons, SOS gestures or emergency numbers. In a real emergency use appropriate local emergency services; this lesson is not a substitute for them."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "number": 7,
+        "title": "Use Phone AI Without Overspending or Oversharing",
+        "modules": [
+          {
+            "id": "c-smartphone-foundations-w7-m1",
+            "title": "Use Phone AI Without Overspending or Oversharing",
+            "description": "Safe hands-on and written practice; no optional cloud execution required.",
+            "lessons": [
+              {
+                "id": "phone-ai",
+                "title": "Use Phone AI Without Overspending or Oversharing",
+                "minutes": 11,
+                "xp": 90,
+                "summary": "Check compatibility, data sharing and price before using an AI feature.",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "heading": "Start here",
+                    "body": "AI availability is not the same across every phone. Hardware, software, language, region, age/account rules and plan can matter. Google documents device and availability requirements for Gemini mobile apps; Samsung documents Circle to Search for selected supported Galaxy devices. Neither fact means every AI feature works on every Android phone or iPhone."
+                  },
+                  {
+                    "type": "keypoints",
+                    "heading": "Try it safely",
+                    "items": [
+                      "Identify the exact feature and read its current official eligibility and pricing notes.",
+                      "Use fictional non-sensitive input and review any data-sharing or permission explanation.",
+                      "Check whether execution runs locally or uses a network provider; do not infer zero cost from the word AI.",
+                      "In Rreal, optional cloud coaching, speech and project execution require supported paid execution when available. Check the current availability and quote; course reading does not require those purchases."
+                    ]
+                  },
+                  {
+                    "type": "example",
+                    "label": "Fictional practice",
+                    "good": "Fictional task: Summarize a made-up picnic checklist. The learner checks the tool’s requirements and price, then compares the result with the original. No customer data, contacts or passwords are supplied."
+                  },
+                  {
+                    "type": "quiz",
+                    "id": "phone-ai-q1",
+                    "question": "What proves that a phone AI feature is supported on your device?",
+                    "options": [
+                      "A current official compatibility check for that exact feature/model/version",
+                      "Another brand’s advertisement",
+                      "The presence of any camera",
+                      "A promise from an unverified message"
+                    ],
+                    "answer": 0,
+                    "explanation": "Feature-specific requirements are more reliable than assuming all phones share a capability."
+                  },
+                  {
+                    "type": "prompt-lab",
+                    "goal": "Write a fictional AI-feature evaluation table with feature, model/version, language/region eligibility, provider, cost, data shared and facts to verify. Use unknown for missing information and include a no-purchase alternative.",
+                    "starter": "Write your plan locally; no paid generation is required.",
+                    "minScore": 65
+                  },
+                  {
+                    "type": "tip",
+                    "body": "AI can be wrong. Never rely on it as the only source for emergency, medical, financial or legal decisions, and do not purchase an upgrade merely to pass this lesson."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "number": 8,
+        "title": "Build Your Personal Phone Help Toolkit",
+        "modules": [
+          {
+            "id": "c-smartphone-foundations-w8-m1",
+            "title": "Build Your Personal Phone Help Toolkit",
+            "description": "Safe hands-on and written practice; no optional cloud execution required.",
+            "lessons": [
+              {
+                "id": "phone-toolkit",
+                "title": "Build Your Personal Phone Help Toolkit",
+                "minutes": 12,
+                "xp": 100,
+                "summary": "Finish a reusable help card and a plan for checking future feature changes.",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "heading": "Start here",
+                    "body": "A useful phone toolkit explains what you know, where to find current help and how to recover from an unfamiliar screen. Keep the learning record separate from secrets. Your phone will change over time; a checked source and a recorded version make an old instruction easier to recognize. Completing this course means practicing essential skills, not mastering every feature ever released."
+                  },
+                  {
+                    "type": "keypoints",
+                    "heading": "Try it safely",
+                    "items": [
+                      "Create a private device card with model, version, language and links to official help.",
+                      "Add a navigation note, accessibility preference, backup-check reminder and scam stop rule.",
+                      "Record the date when each instruction was checked and mark unresolved compatibility questions.",
+                      "After a major update, review the guide again and report a mismatch to Rreal without uploading private screenshots."
+                    ]
+                  },
+                  {
+                    "type": "example",
+                    "label": "Fictional practice",
+                    "good": "Capstone: Make a one-page fictional help card for a family member. Include finding Settings, reading a version number, reviewing a harmless permission, checking backup status and identifying an official help page. No public post or purchase is required."
+                  },
+                  {
+                    "type": "quiz",
+                    "id": "phone-toolkit-q1",
+                    "question": "What makes your toolkit useful after a phone update?",
+                    "options": [
+                      "A list of all your passwords",
+                      "A claim that its instructions never change",
+                      "Model/version notes, check dates and official sources",
+                      "Only a copied screenshot without context"
+                    ],
+                    "answer": 2,
+                    "explanation": "Provenance and a review habit let you identify stale instructions and find a current supported path."
+                  },
+                  {
+                    "type": "prompt-lab",
+                    "goal": "Create a one-page fictional phone help card with model/version placeholders, official-source links, navigation and accessibility notes, a backup-check reminder, a scam stop rule and a dated review checklist. Exclude passwords, serial numbers and personal contacts.",
+                    "starter": "Write your plan locally; no paid generation is required.",
+                    "minScore": 65
+                  },
+                  {
+                    "type": "tip",
+                    "body": "You can finish every lesson with written practice, built-in tools or a trusted helper. No cloud speech, AI subscription, new account or paid Rreal generation is required to learn these skills."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
 ];
