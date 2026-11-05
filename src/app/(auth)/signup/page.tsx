@@ -32,7 +32,7 @@ export default function SignupPage() {
   return (
     <AuthCard
       title="Create your account"
-      subtitle="Every course and tool for $1/month. Cancel anytime."
+      subtitle={lang === "es" ? "Todos los cursos publicados por $1 al mes. La ejecución de IA opcional tiene costo aparte cuando esté disponible. Cancela cuando quieras." : "Every published course for $1/month. Optional AI execution costs extra when available. Cancel anytime."}
       footer={
         <>
           Already have an account? <Link href="/login" className="font-semibold text-neon hover:underline">Sign in</Link>
