@@ -5,10 +5,12 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { AlertTriangle, ArrowRight, Brain, Clapperboard, Flame, FlaskConical, Mic, Snowflake, Sparkles, Zap } from "lucide-react";
-import { RequireAuth } from "@/components/RequireAuth";
+import { ReferralPanel } from "@/components/ReferralPanel";
+import { RequireMember } from "@/components/RequireAuth";
+import { useI18n } from "@/lib/i18n";
 import { ProgressBar, ProgressRing } from "@/components/ui/ProgressRing";
-import { useAcademy, TOTAL_LESSONS } from "@/lib/store";
-import { TRACKS, nextLesson, trackProgress, lockReason } from "@/lib/curriculum";
+import { useAcademy } from "@/lib/store";
+import { TRACKS, ALL_TRACKS, nextLesson, trackProgress, lockReason, inProgressTracks, LEVEL_NAMES } from "@/lib/curriculum";
 import { dayKey, levelTitle, streakStatus, leagueFor } from "@/lib/gamification";
 import { BADGES } from "@/lib/badges";
 
@@ -47,7 +49,9 @@ function WeekChart({ xpByDay }: { xpByDay: Record<string, number> }) {
 }
 
 function Dashboard() {
-  const { user, progress, level, todayXp, subscribed, subscription } = useAcademy();
+  const { user, progress, level, todayXp, subscribed, catalogVersion } = useAcademy();
+  const { t } = useI18n();
+  void catalogVersion;
   const router = useRouter();
   useEffect(() => {
     if (!progress.onboarding.done) router.replace("/onboarding");
@@ -62,39 +66,33 @@ function Dashboard() {
   const league = leagueFor(weekXp);
   const recentBadges = BADGES.filter((b) => progress.badges[b.id]).slice(-6);
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const greeting = hour < 12 ? t("dash.morning") : hour < 18 ? t("dash.afternoon") : t("dash.evening");
+  const started = inProgressTracks(progress.completed).filter((x) => x.kind !== "program");
+  const finishedCourses = ALL_TRACKS.filter((x) => x.kind !== "program" && trackProgress(x.id, progress.completed).pct === 100);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
       <header className="mb-8">
         <h1 className="font-display text-3xl font-bold sm:text-4xl">{greeting}, {user?.displayName.split(" ")[0]} {user?.avatar}</h1>
-        <p className="mt-1 text-muted">Level {level.level} · {levelTitle(level.level)} · {doneCount}/{TOTAL_LESSONS} lessons</p>
+        <p className="mt-1 text-muted">{t("dash.level")} {level.level} · {levelTitle(level.level)} · {doneCount} {t("dash.lessons")} · {finishedCourses.length} courses completed</p>
       </header>
 
       {status === "at-risk" && (
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} role="alert" className="mb-6 flex flex-col gap-3 rounded-2xl border border-flame/60 bg-flame/10 p-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="flex items-center gap-3 font-semibold">
-            <AlertTriangle className="h-5 w-5 text-flame" aria-hidden="true" /> Your {progress.streak.current}-day streak ends at midnight! One lesson keeps it alive.
+            <AlertTriangle className="h-5 w-5 text-flame" aria-hidden="true" /> 🔥 {progress.streak.current} — {t("dash.atRisk")}
           </p>
-          {next && <Link href={`/lesson/${next.lesson.id}`} className="btn-primary">Save my streak</Link>}
+          {next && <Link href={`/lesson/${next.lesson.id}`} className="btn-primary">{t("dash.save")}</Link>}
         </motion.div>
       )}
 
-      {!subscribed && (
-        <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-violet/50 bg-violet/10 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <p><strong>You’re on the free plan.</strong> Week 1 is unlocked. Start a 7-day free trial to unlock all 8 weeks, certificates and the full Studio.</p>
-          <Link href="/pricing" className="btn-violet shrink-0">Start free trial</Link>
-        </div>
-      )}
-      {subscription.status === "trialing" && subscription.trialEndsAt && (
-        <p className="mb-6 text-sm text-muted">Free trial active until {new Date(subscription.trialEndsAt).toLocaleDateString()}.</p>
-      )}
 
+      {process.env.NEXT_PUBLIC_REFERRALS_ENABLED === "true" && <div className="mb-6"><ReferralPanel /></div>}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Continue */}
         <section className="card relative overflow-hidden lg:col-span-2" aria-labelledby="continue-title">
           <div className="absolute -right-10 -top-10 h-48 w-48 rounded-full bg-neon/10 blur-3xl" aria-hidden="true" />
-          <h2 id="continue-title" className="text-sm font-semibold uppercase tracking-widest text-neon">Continue learning</h2>
+          <h2 id="continue-title" className="text-sm font-semibold uppercase tracking-widest text-neon">{t("dash.continue")} · {t("dash.program")}</h2>
           {next ? (
             <>
               <p className="mt-3 text-sm text-muted">{next.track.emoji} {next.track.name} · Week {next.week.number} · {next.module.title}</p>
@@ -105,7 +103,7 @@ function Dashboard() {
                   <Link href="/pricing" className="btn-violet">Unlock Week {next.week.number}</Link>
                 ) : (
                   <Link href={`/lesson/${next.lesson.id}`} className="btn-primary">
-                    Start lesson <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    {t("dash.start")} <ArrowRight className="h-4 w-4" aria-hidden="true" />
                   </Link>
                 )}
                 <span className="chip">⏱ {next.lesson.minutes} min</span>
@@ -126,8 +124,8 @@ function Dashboard() {
             </div>
           </ProgressRing>
           <div>
-            <h2 id="goal-title" className="font-display text-lg font-semibold">Daily goal</h2>
-            <p className="text-sm text-muted">{goalPct >= 100 ? "Crushed it today! 🎉" : `${progress.dailyGoalXp - todayXp} XP to go`}</p>
+            <h2 id="goal-title" className="font-display text-lg font-semibold">{t("dash.goal")}</h2>
+            <p className="text-sm text-muted">{goalPct >= 100 ? t("dash.crushed") : `${progress.dailyGoalXp - todayXp} ${t("dash.toGo")}`}</p>
           </div>
         </section>
 
@@ -138,7 +136,7 @@ function Dashboard() {
             <Flame className={`h-14 w-14 ${progress.streak.current ? "animate-flicker text-flame" : "text-muted"}`} aria-hidden="true" />
             <div>
               <p className="font-display text-4xl font-bold">{progress.streak.current}</p>
-              <p className="text-sm text-muted">day streak · best {progress.streak.longest}</p>
+              <p className="text-sm text-muted">{t("dash.streak")} · {t("dash.best")} {progress.streak.longest}</p>
             </div>
           </div>
           <p className="mt-4 flex items-center gap-2 text-sm text-muted">
@@ -159,15 +157,15 @@ function Dashboard() {
 
         {/* Weekly chart */}
         <section className="card" aria-labelledby="week-title">
-          <h2 id="week-title" className="mb-4 font-display text-lg font-semibold">This week</h2>
+          <h2 id="week-title" className="mb-4 font-display text-lg font-semibold">{t("dash.week")}</h2>
           <WeekChart xpByDay={progress.xpByDay} />
         </section>
 
         {/* Tracks */}
         <section className="card lg:col-span-2" aria-labelledby="tracks-title">
           <div className="mb-4 flex items-center justify-between">
-            <h2 id="tracks-title" className="font-display text-lg font-semibold">Your tracks</h2>
-            <Link href="/learn" className="text-sm text-neon hover:underline">View all</Link>
+            <h2 id="tracks-title" className="font-display text-lg font-semibold">{t("dash.program")}</h2>
+            <Link href="/learn" className="text-sm text-neon hover:underline">{t("dash.viewAll")}</Link>
           </div>
           <ul className="space-y-4">
             {TRACKS.map((t) => {
@@ -189,13 +187,15 @@ function Dashboard() {
 
         {/* Quick actions */}
         <section className="card" aria-labelledby="quick-title">
-          <h2 id="quick-title" className="mb-4 font-display text-lg font-semibold">Practice</h2>
+          <h2 id="quick-title" className="mb-4 font-display text-lg font-semibold">{t("dash.practice")}</h2>
           <ul className="grid grid-cols-2 gap-3">
             {[
               { href: "/coach", icon: Mic, label: "Talk to Coach" },
               { href: "/sandbox", icon: FlaskConical, label: "Prompt Sandbox" },
               { href: "/studio", icon: Clapperboard, label: "Video Studio" },
               { href: "/review", icon: Brain, label: "Daily Review" },
+              { href: "/playbooks", icon: Sparkles, label: "Playbooks" },
+              { href: "/create", icon: Zap, label: "Create a course" },
             ].map(({ href, icon: Icon, label }) => (
               <li key={href}>
                 <Link href={href} className="flex h-full flex-col items-center gap-2 rounded-xl border border-line p-4 text-center text-sm font-semibold transition hover:border-neon hover:shadow-glow">
@@ -206,10 +206,36 @@ function Dashboard() {
           </ul>
         </section>
 
+        {/* My courses */}
+        <section className="card lg:col-span-3" aria-labelledby="mycourses-title">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 id="mycourses-title" className="font-display text-lg font-semibold">{t("dash.myCourses")}</h2>
+            <Link href="/learn" className="text-sm text-neon hover:underline">{t("dash.browse")}</Link>
+          </div>
+          {started.length + finishedCourses.length ? (
+            <ul className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {[...started, ...finishedCourses].map((c) => {
+                const p = trackProgress(c.id, progress.completed);
+                const nxt = nextLesson(progress.completed, c.id);
+                return (
+                  <li key={c.id} className="rounded-xl border border-line p-4">
+                    <p className="font-semibold">{c.emoji} {c.name}</p>
+                    <p className="text-xs text-muted">{LEVEL_NAMES[c.level]} · {p.done}/{p.total}</p>
+                    <ProgressBar pct={p.pct} label={`${c.name} progress`} className="mt-3" />
+                    <Link href={nxt ? `/lesson/${nxt.lesson.id}` : "/certificates"} className="mt-3 inline-flex text-sm font-semibold text-neon">{nxt ? `${t("lesson.continue")} →` : "🎓 Certificate →"}</Link>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-muted">{t("dash.noCourses")} <Link href="/learn" className="text-neon underline">{t("dash.browse")}</Link></p>
+          )}
+        </section>
+
         {/* Badges */}
         <section className="card lg:col-span-3" aria-labelledby="badges-title">
           <div className="mb-4 flex items-center justify-between">
-            <h2 id="badges-title" className="flex items-center gap-2 font-display text-lg font-semibold"><Sparkles className="h-5 w-5 text-violet" aria-hidden="true" /> Recent badges</h2>
+            <h2 id="badges-title" className="flex items-center gap-2 font-display text-lg font-semibold"><Sparkles className="h-5 w-5 text-violet" aria-hidden="true" /> {t("dash.badges")}</h2>
             <Link href="/achievements" className="text-sm text-neon hover:underline">All badges</Link>
           </div>
           {recentBadges.length ? (
@@ -232,8 +258,8 @@ function Dashboard() {
 
 export default function DashboardPage() {
   return (
-    <RequireAuth>
+    <RequireMember>
       <Dashboard />
-    </RequireAuth>
+    </RequireMember>
   );
 }

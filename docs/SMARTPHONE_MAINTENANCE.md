@@ -1,0 +1,31 @@
+# Smartphone course integration and maintenance plan — 2026-11-05
+
+## Delivered local content
+12 authored lessons,72 blocks,12 distinct four-option quizzes with integer answers0–3,12 prompt labs. All lessons have6 blocks and one quiz/lab. Stable IDs begin phone-. Structural/length/source checks pass; no collision with current catalog IDs. Proposed Track ID c-smartphone-foundations, category foundations, level1,8-week grouping3/2/2/1/1/1/1/1. New content is a JSON catalog Track, NOT a request to GeneratedCourseSchema, whose API currently caps generated courses at10 lessons. No shared courses.ts or seed was modified.
+
+Existing PromptLab grades locally as learners type, so a learner can pass the written prompt without calling /api/sandbox. Its Run prompt button currently calls the API. Before release make the optional paid action conspicuous; no mandatory Run click or hidden credit debit. Keep written instructions and built-in text size/captions/device help available without cloud speech. Screen-reader users need usable navigation, not a forced paid read-aloud option. Existing mode/provider capability differs by device; never promise universal offline voices.
+
+## Integration acceptance
+1. Review lesson content and proposed pacing. Add via existing curriculum helpers in courses.ts, preserving every old lesson/quiz ID. For variable weekly counts use a generalized weekly grouping helper rather than silently forcing one-new-lesson/week or losing lessons.
+2. Regenerate seed through existing script, but release only targeted reviewed INSERTs for new track/lessons. Preflight actual production ordinals before generating SQL; append or otherwise safely allocate without renumbering existing lessons. Do not repeat the previously caught global-ordinal collision.
+3. Add tests for12 exact IDs, anatomy, all8 weekly boundaries, sequential prerequisites, empty/unavailable feature guides and existing mapping preservation. Run required typecheck/lint/all unit tests before any commit. New phone rows are not applied in this package.
+4. Review keyboard/screen-reader/44px controls, mobile layout, captions, local prompt pass without paid API, empty/unknown model paths. Device-specific acceptance on representative iPhone, Pixel and Galaxy versions must be recorded. No emulation screenshot implies physical-device feature support.
+5. Human-reviewed Spanish translation stored once, with glossary and matching stable IDs. Never silently charge AL for a fresh translation every read.
+6. No claims of accredited certificates; this is Rreal course completion. No device account creation, emergency call, reset, firmware flashing, sideload, paid feature or public upload required to finish.
+
+## Device / feature registry
+Store public model family, OS/version range, manufacturer interface (e.g. One UI), language/region/carrier eligibility where documented, feature, official source URL, last_verified_at, effective date, reviewer, content version, and status VERIFIED / UNKNOWN / STALE / NOT_SUPPORTED. User may voluntarily choose model/version/language locally or in preferences; do not collect IMEI, serial, phone number or inferred device fingerprint. Do not equate browser user-agent with exact model.
+
+Start with generic iPhone/iOS, Pixel/Android and Galaxy/One UI guide selectors. Other manufacturers get a truthful official-support fallback and an UNKNOWN label until reviewed. Feature categories: navigation/input; communications; network; accessibility; camera/media; files/backup; permissions/security; updates/battery; emergency preparation; AI compatibility. Feature completeness is an ongoing backlog, not a marketing promise to cover every phone ever made. Older unsupported devices remain clearly labeled; no fabricated support end dates.
+
+## Low-cost update loop
+On a configurable weekly schedule, fetch allowlisted official help/release-note pages with caching/conditional requests. Compare content hashes/updated dates, not every rotating banner. Store diff and affected device/lesson IDs in a review queue. No paid model calls required for detection; optional Ollama summarizes only sanitized public diffs under existing two-thread/resource caps when owner permits. A human validates model/version/region changes and tests the relevant path before publishing. Missing/blocked pages produce source-unavailable review tasks; never mark unchanged as freshly verified. Check links monthly and review emergency/security material promptly after a material advisory. Display last reviewed date and a Report mismatch path; don't auto-publish generated changes.
+
+No watcher/cron is enabled by this package, and no new completion-monitor automation was created. A future application update service needs a separately tested scheduler and a maintained accountable reviewer; local Blackie sleep/offline is not24/7 availability. Sponsor placement may be disclosed on a resource page but cannot control safety guidance, quiz answers or feature compatibility. Never require affiliate purchase to complete the course.
+
+## Source status and limitations
+Checked official Apple iPhone user guide, Apple accessibility features, Google Android version/backup/permission guides, Google Select to Speak, Apple scam guidance, Pixel emergency-help guidance, Gemini mobile availability and Samsung Galaxy update/Circle to Search help. Exact feature eligibility remains device-specific; no latest OS version number is hardcoded. Two Apple deep-link fetches returned429; those pages are not cited as reviewed support for exact paths. No personal phone was accessed, no device screenshots were tested, no production changes made.
+
+
+## Implemented source-change detector
+Run `node scripts/check-smartphone-guides.mjs work/smartphone-source-review.json`. It reads the fixed official allowlist in SMARTPHONE_SOURCES.json, limits response size/time, refuses redirects and unexpected destinations, records hashes and queues initial/changed/unavailable sources for review. A hash difference is not proof a phone feature changed; an unchanged page does not prove every instruction remains correct. It never edits or publishes course content. Tests use local response fixtures; no provider model calls. No recurring schedule is enabled. An approved n8n/backend job can invoke this bounded checker later without any AI step, then notify a human reviewer.

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { RequireAuth } from "@/components/RequireAuth";
+import { RequireMember } from "@/components/RequireAuth";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { BADGES } from "@/lib/badges";
 import { useAcademy } from "@/lib/store";
@@ -41,5 +41,5 @@ function Badges() {
 }
 
 export default function AchievementsPage() {
-  return <RequireAuth><Badges /></RequireAuth>;
+  return <RequireMember><Badges /></RequireMember>;
 }

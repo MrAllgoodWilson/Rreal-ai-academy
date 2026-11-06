@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuthCard, FormAlert, PasswordField } from "@/components/AuthCard";
 import { useAcademy } from "@/lib/store";
@@ -9,7 +10,18 @@ import { useAcademy } from "@/lib/store";
 function ResetForm() {
   const { updatePassword } = useAcademy();
   const router = useRouter();
-  const demoEmail = useSearchParams().get("demo") ?? undefined;
+  const params = useSearchParams();
+  const demoEmail = params.get("demo") ?? undefined;
+  const tokenHash = params.get("token_hash");
+
+  // Links from our own reset email carry a one-time token: exchange it for a session first.
+  useEffect(() => {
+    const sb = getSupabaseBrowser();
+    if (!sb || !tokenHash) return;
+    sb.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" }).then(({ error }) => {
+      if (error) setError("This reset link is invalid or expired. Request a new one.");
+    });
+  }, [tokenHash]);
   const [pw, setPw] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");

@@ -14,6 +14,11 @@ export interface Prefs {
   sounds: boolean;
   visualAlerts: boolean;
   voiceRate: number;
+  voicePitch: number;
+  /** "premium" = selected cloud/ElevenLabs voice; "device" = selected browser voice. */
+  voiceProvider: "premium" | "device";
+  premiumVoiceId: string;
+  deviceVoiceName: string;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -27,6 +32,10 @@ export const DEFAULT_PREFS: Prefs = {
   sounds: true,
   visualAlerts: true,
   voiceRate: 1,
+  voicePitch: 1,
+  voiceProvider: "premium",
+  premiumVoiceId: "cf:en:asteria",
+  deviceVoiceName: "",
 };
 
 const KEY = "rreal.v1.prefs";
@@ -119,15 +128,19 @@ export function A11yProvider({ children }: { children: ReactNode }) {
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
       u.rate = prefs.voiceRate;
+      u.pitch = prefs.voicePitch;
+      const lang = document.documentElement.lang === "es" ? "es" : "en";
+      u.lang = lang === "es" ? "es-US" : "en-US";
       const voices = window.speechSynthesis.getVoices();
-      const preferred = voices.find((v) => /en/i.test(v.lang) && /(natural|neural|samantha|google us|aria|jenny)/i.test(v.name)) ?? voices.find((v) => /^en/i.test(v.lang));
+      const chosen = voices.find((v) => v.name === prefs.deviceVoiceName && v.lang.toLowerCase().startsWith(lang));
+      const preferred = chosen ?? voices.find((v) => v.lang.toLowerCase().startsWith(lang) && /(natural|neural|samantha|google|aria|jenny|paulina|monica)/i.test(v.name)) ?? voices.find((v) => v.lang.toLowerCase().startsWith(lang));
       if (preferred) u.voice = preferred;
       u.onboundary = (e) => opts?.onBoundary?.(e.charIndex);
       u.onend = () => opts?.onEnd?.();
       u.onerror = () => opts?.onEnd?.();
       window.speechSynthesis.speak(u);
     },
-    [prefs.voiceRate],
+    [prefs.voiceRate, prefs.voicePitch, prefs.deviceVoiceName],
   );
 
   const stopSpeaking = useCallback(() => {

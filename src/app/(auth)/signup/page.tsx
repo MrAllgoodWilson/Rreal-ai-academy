@@ -4,26 +4,35 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthCard, Field, FormAlert, PasswordField } from "@/components/AuthCard";
+import { useI18n } from "@/lib/i18n";
+import { rememberReferral, forgetReferral, validReferralCode } from "@/lib/referrals-client";
 import { USERNAME_RE, useAcademy } from "@/lib/store";
 
 export default function SignupPage() {
+  const { lang } = useI18n();
   const { signUp, user, ready } = useAcademy();
   const router = useRouter();
-  const [f, setF] = useState({ displayName: "", username: "", email: "", password: "", agree: false });
+  const [f, setF] = useState({ displayName: "", username: "", email: "", password: "", referralCode: "", agree: false });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (ready && user) router.replace("/onboarding");
+    if (ready && user) router.replace("/subscribe");
   }, [ready, user, router]);
+
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_REFERRALS_ENABLED !== "true") return;
+    const code = new URLSearchParams(window.location.search).get("ref")?.trim().toLowerCase() || "";
+    if (validReferralCode(code)) { rememberReferral(code); setF((current) => ({ ...current, referralCode: code })); }
+  }, []);
 
   const usernameErr = f.username && !USERNAME_RE.test(f.username) ? "3–20 characters: letters, numbers, underscores." : undefined;
 
   return (
     <AuthCard
       title="Create your account"
-      subtitle="Week 1 is free. No credit card."
+      subtitle={lang === "es" ? "Todos los cursos publicados por $1 al mes. La ejecución de IA opcional tiene costo aparte cuando esté disponible. Cancela cuando quieras." : "Every published course for $1/month. Optional AI execution costs extra when available. Cancel anytime."}
       footer={
         <>
           Already have an account? <Link href="/login" className="font-semibold text-neon hover:underline">Sign in</Link>
@@ -38,7 +47,8 @@ export default function SignupPage() {
           if (!f.agree) return setError("Please accept the Terms and Privacy Policy to continue.");
           setBusy(true);
           setError("");
-          const r = await signUp(f);
+          if (f.referralCode) rememberReferral(f.referralCode); else forgetReferral();
+          const r = await signUp({ ...f, referralCode: f.referralCode || undefined });
           setBusy(false);
           if (!r.ok) setError(r.error);
           else if (r.message) setNotice(r.message);
@@ -50,6 +60,10 @@ export default function SignupPage() {
         <Field id="username" label="Username" autoComplete="username" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value.trim() })} error={usernameErr} required />
         <Field id="email" label="Email" type="email" autoComplete="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required />
         <PasswordField id="new-password" label="Password" value={f.password} onChange={(password) => setF({ ...f, password })} autoComplete="new-password" showStrength />
+        {process.env.NEXT_PUBLIC_REFERRALS_ENABLED === "true" && <div>
+          <Field id="referralCode" label={lang === "es" ? "Código de referido (opcional)" : "Referral code (optional)"} autoComplete="off" value={f.referralCode} onChange={(event) => setF({ ...f, referralCode: event.target.value.trim().toLowerCase() })} />
+          <p className="mt-1 text-sm text-muted">{lang === "es" ? "La persona que te invitó puede ganar créditos de proyectos por referidos con pagos válidos. El precio de tu membresía no cambia." : "The person who invited you may earn project credits after qualifying paid referrals. Your membership price is unchanged."}</p>
+        </div>}
         <div className="flex items-start gap-3">
           <input id="agree" type="checkbox" checked={f.agree} onChange={(e) => setF({ ...f, agree: e.target.checked })} className="mt-1 h-5 w-5 accent-[rgb(var(--neon))]" />
           <label htmlFor="agree" className="text-sm text-muted">

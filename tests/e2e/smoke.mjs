@@ -57,8 +57,17 @@ await page.getByLabel(/I agree/).check();
 await axe("signup");
 await shot("02-signup");
 await page.getByRole("button", { name: "Create account" }).click();
+await page.waitForURL("**/subscribe*");
+ok("sign up → membership paywall", page.url().includes("/subscribe"));
+await page.goto(`${BASE}/dashboard`);
+await page.waitForURL("**/subscribe*");
+ok("dashboard blocked until paid", page.url().includes("/subscribe"));
+await page.waitForTimeout(600);
+await shot("02b-subscribe");
+await axe("subscribe");
+await page.getByRole("button", { name: /Join for \$1\/month/ }).click();
 await page.waitForURL("**/onboarding");
-ok("sign up → onboarding", page.url().endsWith("/onboarding"));
+ok("payment → onboarding", page.url().endsWith("/onboarding"));
 
 // 3. Onboarding
 await page.getByRole("radio", { name: /Boost my career/ }).click();
@@ -143,14 +152,49 @@ await page.getByRole("button", { name: /Schedule posts/ }).click();
 const [dl] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: /Export to calendar/ }).click()]);
 ok("studio exports .ics", dl.suggestedFilename().endsWith(".ics"));
 
-// 8. Paywall + trial
-await page.goto(`${BASE}/lesson/real-framework`);
-ok("week 2 is paywalled on free plan", await seen(page.getByRole("heading", { name: /Pro lesson/ })));
+// 8. Pricing, catalog, playbooks, creator, connections, Spanish
 await page.goto(`${BASE}/pricing`);
+ok("pricing shows $1/month", await seen(page.getByText("$1", { exact: false })));
 await shot("10-pricing");
-await page.getByRole("button", { name: /Start 7-day free trial/ }).click();
-await page.getByText(/free trial is active/).waitFor({ timeout: 10000 });
-ok("trial starts", true);
+await page.goto(`${BASE}/learn`);
+ok("catalog lists standalone courses", await seen(page.getByRole("heading", { name: /Build a Website with AI — No Code/ })));
+await page.waitForTimeout(800);
+await shot("10b-catalog", true);
+await axe("catalog");
+await page.getByRole("radio", { name: "Expert" }).click();
+ok("level filter works", await seen(page.getByRole("heading", { name: /AI Agents & Coding Agents for Pros/ })));
+await page.goto(`${BASE}/learn/c-website-nocode`);
+ok("course page lists lessons", await seen(page.getByText("Plan Your Site with AI")));
+await page.goto(`${BASE}/playbooks`);
+ok("playbooks page", await seen(page.getByRole("heading", { name: /Faceless TikTok/ })));
+await page.goto(`${BASE}/playbooks/pb-website-code`);
+ok("playbook lists required subscriptions", await seen(page.getByRole("heading", { name: /Accounts & subscriptions you need/ })));
+ok("playbook names GitHub + Vercel", (await seen(page.getByText("GitHub", { exact: true }))) && (await seen(page.getByText("Vercel", { exact: true }))));
+await page.getByRole("checkbox", { name: "Mark step 1 done" }).click();
+ok("playbook steps can be checked off", await seen(page.getByText("1/5 steps done")));
+await page.waitForTimeout(500);
+await shot("10c-playbook");
+await axe("playbook");
+await page.goto(`${BASE}/create`);
+await page.getByLabel("What do you want to learn or create?").fill("Teach me to make Christmas flyers for my nail salon");
+await page.getByRole("button", { name: /Build my course/ }).click();
+ok("course creator responds (needs ANTHROPIC_API_KEY for real generation)", await seen(page.getByRole("alert").or(page.getByText("Course ready")), 90000));
+await shot("10d-create");
+await axe("create");
+await page.goto(`${BASE}/connections`);
+ok("connections & plugins page", await seen(page.getByRole("heading", { name: /Plugins/ })));
+await shot("10e-connections");
+await axe("connections");
+await page.goto(`${BASE}/settings`);
+ok("voice picker offers premium voices", await seen(page.getByText("Rachel")));
+await page.getByRole("radio", { name: "male", exact: true }).click();
+ok("voice gender filter", (await seen(page.getByText("Adam"))) && !(await page.getByText("Rachel").isVisible()));
+await page.getByRole("radio", { name: "Español" }).click();
+ok("Spanish UI", await seen(page.getByRole("link", { name: "Panel" }).or(page.getByRole("link", { name: "Cursos" }))));
+await page.goto(`${BASE}/dashboard`);
+ok("dashboard in Spanish", await seen(page.getByText(/Buenos días|Buenas tardes|Buenas noches/)));
+await shot("10f-dashboard-es");
+await page.evaluate(() => localStorage.setItem("rreal.v1.lang", "en"));
 
 // 9. Certificates: mark Foundations complete (simulates finishing the track), claim, verify
 await page.evaluate(() => {

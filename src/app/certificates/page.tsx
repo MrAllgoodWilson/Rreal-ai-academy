@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Download, ExternalLink, Link2, Linkedin, Lock, Printer } from "lucide-react";
-import { RequireAuth } from "@/components/RequireAuth";
+import { RequireMember } from "@/components/RequireAuth";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProgressBar } from "@/components/ui/ProgressRing";
 import { CertificateArt, certificateSvg } from "@/components/CertificateArt";
 import { FormAlert } from "@/components/AuthCard";
-import { TRACKS, trackProgress, lessonsForTrack } from "@/lib/curriculum";
+import { TRACKS, ALL_TRACKS, trackProgress, lessonsForTrack } from "@/lib/curriculum";
 import { useAcademy, type Certificate } from "@/lib/store";
 import { linkedInAddUrl, verifyUrl } from "@/lib/certificates/shared";
 import { useA11y } from "@/lib/a11y";
@@ -39,7 +39,8 @@ function CertActions({ c }: { c: Certificate }) {
 }
 
 function Certificates() {
-  const { user, progress, subscribed, addCertificate } = useAcademy();
+  const { user, progress, subscribed, addCertificate, catalogVersion } = useAcademy();
+  void catalogVersion;
   const [selected, setSelected] = useState<string | null>(progress.certificates[0]?.trackId ?? null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -69,7 +70,8 @@ function Certificates() {
   };
 
   const current = progress.certificates.find((c) => c.trackId === selected);
-  const rows = [...TRACKS.map((t) => ({ id: t.id, name: t.certificateTitle, emoji: t.emoji, pct: trackProgress(t.id, progress.completed).pct })), { ...MASTER, pct: allDone ? 100 : Math.round(TRACKS.reduce((a, t) => a + trackProgress(t.id, progress.completed).pct, 0) / TRACKS.length) }];
+  const rows = [...TRACKS.map((t) => ({ id: t.id, name: t.certificateTitle, emoji: t.emoji, pct: trackProgress(t.id, progress.completed).pct })), { ...MASTER, pct: allDone ? 100 : Math.round(TRACKS.reduce((a, t) => a + trackProgress(t.id, progress.completed).pct, 0) / TRACKS.length) },
+    ...ALL_TRACKS.filter((t) => t.kind !== "program" && (trackProgress(t.id, progress.completed).done > 0 || progress.certificates.some((c) => c.trackId === t.id))).map((t) => ({ id: t.id, name: t.certificateTitle, emoji: t.emoji, pct: trackProgress(t.id, progress.completed).pct }))];
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
@@ -127,5 +129,5 @@ function Certificates() {
 }
 
 export default function CertificatesPage() {
-  return <RequireAuth><Certificates /></RequireAuth>;
+  return <RequireMember><Certificates /></RequireMember>;
 }

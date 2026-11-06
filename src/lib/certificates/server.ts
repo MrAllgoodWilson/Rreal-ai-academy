@@ -25,6 +25,10 @@ export interface CertificatePayload {
   s: number;
   /** Optional user id */
   u?: string;
+  /** Credential title (needed for AI-generated courses that aren't in the static catalog) */
+  ti?: string;
+  /** Accreditation details when co-issued with an accredited partner */
+  a?: { p: string; b: string; id?: string; ceu: number };
 }
 
 const MASTER_TITLE = "Rreal Certified AI Professional";
@@ -41,7 +45,7 @@ function secret() {
 const b64 = (buf: Buffer | string) => Buffer.from(buf).toString("base64url");
 
 export function signCertificate(p: Omit<CertificatePayload, "v" | "cid" | "i"> & { i?: string }) {
-  const payload: CertificatePayload = { v: 1, cid: randomBytes(8).toString("hex"), i: p.i ?? new Date().toISOString(), n: p.n, t: p.t, s: p.s, u: p.u };
+  const payload: CertificatePayload = { v: 1, cid: randomBytes(8).toString("hex"), i: p.i ?? new Date().toISOString(), n: p.n, t: p.t, s: p.s, u: p.u, ti: p.ti, a: p.a };
   const body = b64(JSON.stringify(payload));
   const sig = b64(createHmac("sha256", secret()).update(body).digest());
   return { token: `${body}.${sig}`, payload };
@@ -67,6 +71,6 @@ export function verifyCertificate(token: string): { valid: true; payload: Certif
   }
 }
 
-export const credentialTitle = (trackId: string) => (trackId === "master" ? MASTER_TITLE : getTrack(trackId)?.certificateTitle ?? "Rreal Certified");
+export const credentialTitle = (trackId: string, fallback?: string) => (trackId === "master" ? MASTER_TITLE : getTrack(trackId)?.certificateTitle ?? fallback ?? "Rreal Certified");
 export const credentialCode = (p: Pick<CertificatePayload, "cid" | "i">) => `RRAI-${p.i.slice(0, 4)}-${p.cid.slice(0, 8).toUpperCase()}`;
 export const fingerprint = (token: string) => createHash("sha256").update(token).digest("hex");

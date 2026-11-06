@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RequireAuth } from "@/components/RequireAuth";
+import { RequireMember } from "@/components/RequireAuth";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PromptLab } from "@/components/PromptLab";
 
@@ -33,5 +33,5 @@ function Sandbox() {
 }
 
 export default function SandboxPage() {
-  return <RequireAuth><Sandbox /></RequireAuth>;
+  return <RequireMember><Sandbox /></RequireMember>;
 }
