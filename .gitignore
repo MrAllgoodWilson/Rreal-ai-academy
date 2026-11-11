@@ -12,3 +12,7 @@ coverage
 .wrangler
 .dev.vars
 drafts/
+
+# Production environment
+.env.production
+.env*.production
