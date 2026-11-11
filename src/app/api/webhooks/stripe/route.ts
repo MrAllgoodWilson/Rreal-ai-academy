@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { getStripe, verifyWebhook } from "@/lib/stripe";
+import { getStripe, MONTHLY_PRICE_ID, verifyWebhook } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { processReferralPaymentEvent } from "@/lib/referrals-server";
 import { CREDIT_PACKS, packByPaymentLink } from "@/lib/credits";
@@ -69,35 +69,59 @@ export async function POST(req: Request) {
   };
 
   try {
+    // Helper: fulfills subscription checkout for both completed and async_payment_succeeded
+    const fulfillSubscription = async (s: Stripe.Checkout.Session) => {
+      if (s.mode !== "subscription" || !s.subscription) return;
+
+      // Brand & Product Check (R-3 guard against cross-tenant subscription leakage):
+      // Reject checkouts belonging to foreign products or other business modules on shared Stripe account
+      if (s.metadata?.business && s.metadata.business !== "rreal") return;
+      if (s.metadata?.app && s.metadata.app !== "rreal-ai-academy") return;
+      if (s.metadata?.product && !s.metadata.product.includes("rreal") && !s.metadata.product.includes("academy")) return;
+      const link = typeof s.payment_link === "string" ? s.payment_link : s.payment_link?.id;
+      if (link && link.startsWith("plink_NOT_RREAL")) return;
+
+      // Resolve learner: use client_reference_id, or fall back to customer email (R-5 guard)
+      let userId = s.client_reference_id;
+      if (!userId && (s.customer_details?.email || s.customer_email)) {
+        const email = (s.customer_details?.email || s.customer_email) as string;
+        const { data: userRec } = await admin.from("users").select("id").eq("email", email).limit(1).maybeSingle();
+        userId = userRec?.id ?? null;
+      }
+      if (!userId) return;
+
+      const subId = typeof s.subscription === "string" ? s.subscription : s.subscription.id;
+      const stripe = getStripe();
+      if (stripe) {
+        const sub = await stripe.subscriptions.retrieve(subId);
+        const hasRrealItem = sub.items?.data?.some((item) => item.price.id === MONTHLY_PRICE_ID);
+        const isRrealMetadata = sub.metadata?.app === "rreal-ai-academy" || sub.metadata?.business === "rreal";
+        if (!hasRrealItem && !isRrealMetadata) return; // Foreign subscription
+
+        await upsert({ user_id: userId, stripe_customer_id: customerId(sub.customer), stripe_subscription_id: sub.id, status: sub.status, plan: "monthly", current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null, cancel_at_period_end: sub.cancel_at_period_end });
+      } else {
+        // Payment Link without API key: payment completed ⇒ membership active
+        await upsert({ user_id: userId, stripe_customer_id: customerId(s.customer), stripe_subscription_id: subId, status: s.payment_status === "paid" ? "active" : "incomplete", plan: "monthly" });
+      }
+    };
+
     switch (event.type) {
-      case "checkout.session.completed": {
+      case "checkout.session.completed":
+      case "checkout.session.async_payment_succeeded": {
         const s = event.data.object as Stripe.Checkout.Session;
-        // One-time credit pack purchase → add credits to the learner's wallet (idempotent per session).
         if (s.mode === "payment") {
           await fulfillPack(s);
-          break;
+        } else if (s.mode === "subscription") {
+          await fulfillSubscription(s);
         }
-        if (s.mode !== "subscription" || !s.subscription || !s.client_reference_id) break;
-        const subId = typeof s.subscription === "string" ? s.subscription : s.subscription.id;
-        const stripe = getStripe();
-        if (stripe) {
-          const sub = await stripe.subscriptions.retrieve(subId);
-          await upsert({ user_id: s.client_reference_id, stripe_customer_id: customerId(sub.customer), stripe_subscription_id: sub.id, status: sub.status, plan: "monthly", current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null, cancel_at_period_end: sub.cancel_at_period_end });
-        } else {
-          // Payment Link without API key: payment completed ⇒ membership active.
-          await upsert({ user_id: s.client_reference_id, stripe_customer_id: customerId(s.customer), stripe_subscription_id: subId, status: s.payment_status === "paid" ? "active" : "incomplete", plan: "monthly" });
-        }
-        break;
-      }
-      case "checkout.session.async_payment_succeeded": {
-        // Delayed payment methods: the session completes unpaid, then succeeds later. Needs this event enabled on the Stripe webhook endpoint.
-        await fulfillPack(event.data.object as Stripe.Checkout.Session);
         break;
       }
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
+        if (sub.metadata?.business && sub.metadata.business !== "rreal") break;
+        if (sub.metadata?.app && sub.metadata.app !== "rreal-ai-academy") break;
         const userId = await resolveUser(sub as never);
         if (!userId || !ACTIVE.has(sub.status)) break;
         await upsert({ user_id: userId, stripe_customer_id: customerId(sub.customer), stripe_subscription_id: sub.id, status: sub.status, plan: "monthly", current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null, cancel_at_period_end: sub.cancel_at_period_end });

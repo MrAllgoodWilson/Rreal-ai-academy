@@ -61,4 +61,42 @@ describe("stripe webhook fulfilment", () => {
     expect((await call()).status).toBe(500);
     expect(state.deleted).toContain("webhook_events:evt_2");
   });
+  it("ignores a foreign product subscription (e.g. InboxEdge basic on shared account)", async () => {
+    event = {
+      id: "evt_foreign",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_foreign",
+          mode: "subscription",
+          subscription: "sub_foreign",
+          customer: "cus_1",
+          client_reference_id: "user-1",
+          payment_status: "paid",
+          metadata: { business: "inboxedge", product: "inboxedge-basic" },
+          payment_link: "plink_NOT_RREAL_123",
+        },
+      },
+    };
+    const res = await call();
+    expect(res.status).toBe(200);
+  });
+  it("activates subscription on checkout.session.async_payment_succeeded", async () => {
+    event = {
+      id: "evt_async_sub",
+      type: "checkout.session.async_payment_succeeded",
+      data: {
+        object: {
+          id: "cs_async_sub",
+          mode: "subscription",
+          subscription: "sub_async_1",
+          customer: "cus_1",
+          client_reference_id: "user-1",
+          payment_status: "paid",
+        },
+      },
+    };
+    const res = await call();
+    expect(res.status).toBe(200);
+  });
 });

@@ -15,8 +15,7 @@ const FEATURES = [
   "Rreal Coach voice tutor (English & Spanish) — built-in AI included",
   "Bring your own Claude, ChatGPT, ElevenLabs or Replicate account for premium AI — or buy credits",
   "AI images for flyers & thumbnails + Social Video Studio",
-  "Connect TikTok, Instagram, YouTube, Facebook, LinkedIn & X",
-  "Plugins: Zapier, Make, Slack, Discord, webhooks",
+  "Social & Automation Roadmap (TikTok, YouTube, Zapier integrations coming soon)",
   "Verifiable certificates + one-click LinkedIn",
   "Personal dashboard, streaks, leagues, badges, portfolio",
 ];
