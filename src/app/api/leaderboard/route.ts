@@ -8,6 +8,6 @@ export async function GET() {
   const sb = await getSupabaseServer();
   if (!sb) return NextResponse.json({ demo: true, rows: [] });
   const { data, error } = await sb.rpc("leaderboard_weekly", { p_limit: 50 });
-  if (error) return NextResponse.json({ rows: [] });
-  return NextResponse.json({ rows: data });
+  if (error) return NextResponse.json({ demo: true, rows: [] });
+  return NextResponse.json({ demo: false, rows: Array.isArray(data) ? data : [] });
 }
