@@ -2,7 +2,7 @@
 
 import { Component, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { AlertCircle, Crown, RefreshCw } from "lucide-react";
+import { AlertCircle, Crown, RefreshCw, Users } from "lucide-react";
 import { RequireMember } from "@/components/RequireAuth";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAcademy } from "@/lib/store";
@@ -14,18 +14,6 @@ interface Row {
   avatar: string;
   xp: number;
   me?: boolean;
-}
-
-/** Deterministic demo peers so the board feels alive before real users exist. */
-function demoPeers(seed: number): Row[] {
-  const names = ["Maya", "Jordan", "Priya", "Luis", "Aisha", "Chen", "Tomás", "Grace", "Omar", "Zoe", "Kenji", "Fatima", "Noah", "Ivy"];
-  const avatars = ["🦄", "🐼", "🦁", "🐙", "🦉", "🐯", "🐸", "🦊", "🐨", "🐬", "🦋", "🐝", "🐺", "🐧"];
-  return names.map((n, i) => ({
-    id: `demo-${i}`,
-    name: n,
-    avatar: avatars[i],
-    xp: Math.round(((seed * (i + 7)) % 900) + 40 + (13 - i) * 35),
-  }));
 }
 
 interface BoundaryProps {
@@ -95,8 +83,6 @@ function Board() {
         if (!active) return;
         if (!j || j.demo || !Array.isArray(j.rows)) {
           setRemote(null);
-        } else if (j.rows.length === 0) {
-          setRemote([]);
         } else {
           setRemote(
             j.rows.map(
@@ -132,23 +118,14 @@ function Board() {
     const meAvatar = user?.avatar ?? "👤";
     const me: Row = { id: meId, name: meName, avatar: meAvatar, xp: weekXp, me: true };
 
-    let base: Row[];
-    if (remote === null) {
-      // Demo peers before real users exist or when offline/demo
-      base = demoPeers(new Date().getDate() + 3);
-    } else if (remote.length === 0) {
-      // Real database connected, but no other rows yet
-      base = [];
-    } else {
-      base = remote;
-    }
-
+    const base: Row[] = remote ?? [];
     return [...base.filter((r) => r.id !== meId), me].sort((a, b) => b.xp - a.xp);
   }, [remote, user, weekXp]);
 
   const myRank = Math.max(1, rows.findIndex((r) => r.me) + 1);
   const league = leagueFor(weekXp);
   const nextLeague = LEAGUES.find((l) => l.min > weekXp);
+  const otherClassmatesCount = rows.length - 1;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
@@ -161,10 +138,15 @@ function Board() {
       />
 
       {remote === null && (
-        <p className="mb-4 text-sm text-muted">Showing demo learners. Real classmates appear once the database is connected.</p>
+        <div className="mb-6 rounded-2xl border border-line bg-surface/60 p-4 text-sm text-muted">
+          <p className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-muted" aria-hidden="true" />
+            Showing your weekly activity. Live classmate rankings update as peers complete lessons this week.
+          </p>
+        </div>
       )}
 
-      {remote !== null && remote.length === 0 && (
+      {remote !== null && otherClassmatesCount === 0 && (
         <div className="mb-6 rounded-2xl border border-lime/40 bg-lime/10 p-4 text-sm text-lime">
           You are the first learner on the leaderboard this week! Keep learning to maintain your lead.
         </div>

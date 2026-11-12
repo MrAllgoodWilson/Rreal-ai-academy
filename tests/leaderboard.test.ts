@@ -40,20 +40,21 @@ describe("leaderboard API & state logic", () => {
     expect(league.name).toBe("Bronze");
   });
 
-  it("differentiates demo fallback (null) from honest empty board ([])", () => {
-    // When remote is null (demo / offline), peers should be generated
+  it("retains zero manufactured fake rankings when remote is empty or unconfigured", () => {
+    // When remote is null or [] (no other active users), list must contain ONLY the authentic learner
     const remoteNull: unknown[] | null = null;
-    const baseWhenNull = remoteNull ?? [{ id: "demo-1", name: "Demo User", avatar: "🦄", xp: 100 }];
-    expect(baseWhenNull.length).toBe(1);
+    const baseWhenNull = remoteNull ?? [];
+    const me = { id: "user-123", name: "AL (you)", avatar: "👤", xp: 50, me: true };
+    const rowsWhenNull = [...baseWhenNull, me];
+    expect(rowsWhenNull.length).toBe(1);
+    expect(rowsWhenNull[0].id).toBe("user-123");
 
-    // When remote is empty array [] (real DB connected, but 0 other active users),
-    // it must NOT fall back to fake demo peers if remote is defined
-    const remoteEmpty: unknown[] | null = [];
-    const baseWhenEmpty = remoteEmpty === null ? [{ id: "demo-1", name: "Demo User", avatar: "🦄", xp: 100 }] : remoteEmpty;
-    expect(baseWhenEmpty.length).toBe(0);
+    // Zero fake names like Maya/Jordan/Priya in the list
+    expect(rowsWhenNull.some((r) => r.name === "Maya")).toBe(false);
+    expect(rowsWhenNull.some((r) => r.name === "Jordan")).toBe(false);
   });
 
-  it("sorts learner row into peers accurately without exposing private fields", () => {
+  it("sorts learner row into genuine peers accurately without exposing private fields", () => {
     interface TestRow {
       id: string;
       name: string;
@@ -62,16 +63,16 @@ describe("leaderboard API & state logic", () => {
       me?: boolean;
     }
     const peers: TestRow[] = [
-      { id: "peer-1", name: "Maya", avatar: "🦄", xp: 120 },
-      { id: "peer-2", name: "Jordan", avatar: "🐼", xp: 40 },
+      { id: "peer-1", name: "Genuine Classmate 1", avatar: "🦄", xp: 120 },
+      { id: "peer-2", name: "Genuine Classmate 2", avatar: "🐼", xp: 40 },
     ];
     const me: TestRow = { id: "user-123", name: "AL (you)", avatar: "👤", xp: 50, me: true };
     const rows = [...peers.filter((r) => r.id !== me.id), me].sort((a, b) => b.xp - a.xp);
 
     expect(rows.length).toBe(3);
-    expect(rows[0].name).toBe("Maya");
+    expect(rows[0].name).toBe("Genuine Classmate 1");
     expect(rows[1].name).toBe("AL (you)");
-    expect(rows[2].name).toBe("Jordan");
+    expect(rows[2].name).toBe("Genuine Classmate 2");
     const myRank = rows.findIndex((r) => r.me) + 1;
     expect(myRank).toBe(2);
 
