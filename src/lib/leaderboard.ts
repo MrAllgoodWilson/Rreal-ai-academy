@@ -1,4 +1,4 @@
-import { LEAGUES, leagueFor } from "@/lib/gamification";
+import { LEAGUES, leagueFor, dayKey } from "@/lib/gamification";
 
 export interface LeaderboardRow {
   id: string;
@@ -6,6 +6,7 @@ export interface LeaderboardRow {
   avatar: string;
   xp: number;
   me?: boolean;
+  rank?: number;
 }
 
 export type LeaderboardStatus = "loading" | "unavailable" | "empty" | "active";
@@ -20,7 +21,7 @@ export interface LeaderboardComputedState {
 
 /**
  * Calculates the start of the week (Monday 00:00:00.000 UTC),
- * matching PostgreSQL's date_trunc('week', now()).
+ * matching PostgreSQL's date_trunc('week', now() at time zone 'UTC').
  */
 export function getMondayOfWeek(d: Date = new Date()): Date {
   const date = new Date(d);
@@ -31,16 +32,24 @@ export function getMondayOfWeek(d: Date = new Date()): Date {
 
 /**
  * Calculates the learner's weekly XP aligned with the Monday 00:00:00 UTC cycle.
+ * Clamps to [Monday 00:00:00 UTC, now], discards future-dated XP, negative values, and non-finite numbers.
+ * Supports dayKey matching learner's current local day under non-UTC timezones.
  */
 export function calculateWeeklyXp(xpByDay?: Record<string, number> | null, now: Date = new Date()): number {
   if (!xpByDay || typeof xpByDay !== "object") return 0;
   const mondayTime = getMondayOfWeek(now).getTime();
+  const nowTime = now.getTime();
+  const currentLocalDay = dayKey(now);
+
   return Object.entries(xpByDay)
-    .filter(([k]) => {
+    .filter(([k, v]) => {
+      if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) return false;
+      // If key is learner's local date for `now`, it belongs to today's active cycle
+      if (k === currentLocalDay) return true;
       const time = new Date(k.includes("T") ? k : `${k}T00:00:00Z`).getTime();
-      return !Number.isNaN(time) && time >= mondayTime;
+      return !Number.isNaN(time) && time >= mondayTime && time <= nowTime;
     })
-    .reduce((a, [, v]) => a + (typeof v === "number" && !Number.isNaN(v) ? v : 0), 0);
+    .reduce((a, [, v]) => a + (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0), 0);
 }
 
 export function computeLeaderboardState({
@@ -82,36 +91,80 @@ export function computeLeaderboardState({
     };
   }
 
-  if (status === "empty") {
-    if (weekXp > 0) {
-      return {
-        status,
-        myRank: 1,
-        subtitle: `You're #1 among participating learners this week with ${weekXp} XP.${nextLeagueText} Standings reflect opted-in learners and reset every Monday at 00:00 UTC.`,
-        rows: [me],
-        otherClassmatesCount: 0,
-      };
-    }
+  if (status === "empty" || !remote || remote.length === 0) {
+    const emptyMsg =
+      weekXp > 0
+        ? `No participating learners have placed on the leaderboard this week yet. Standings reflect opted-in learners and reset every Monday at 00:00 UTC.`
+        : `Complete a lesson to place on the weekly leaderboard! Standings reflect opted-in learners and reset every Monday at 00:00 UTC.`;
+
     return {
-      status,
+      status: "empty",
       myRank: null,
-      subtitle: `You have 0 XP this week in the ${league.name} League.${nextLeagueText} Complete a lesson to place on the weekly leaderboard!`,
+      subtitle: `You have ${weekXp} XP this week in the ${league.name} League.${nextLeagueText} ${emptyMsg}`,
       rows: [me],
       otherClassmatesCount: 0,
     };
   }
 
-  // status === "active" (remote has peers)
-  const base: LeaderboardRow[] = remote ?? [];
-  const rows = [...base.filter((r) => r.id !== meId), me].sort((a, b) => b.xp - a.xp);
-  const myRank = rows.findIndex((r) => r.me) + 1;
-  const otherClassmatesCount = rows.length - 1;
+  // status === "active"
+  const selfInRemote = remote.find((r) => r.me || (user?.id && r.id === user.id));
+
+  // If self is not in remote:
+  // C1: If remote has 50 rows (server limit), self is below the top 50, so global rank is unknown -> null
+  // C2: If remote has < 50 rows, but self XP > top returned peer, self is opted out -> null
+  const isSelfOptedOut = !selfInRemote && remote.length < 50 && weekXp > (remote[0]?.xp ?? 0);
+  const isSelfBelowLimit = !selfInRemote && remote.length >= 50;
+
+  // Build combined rows
+  let combinedRows: LeaderboardRow[];
+  if (selfInRemote) {
+    // Self is already in server results: mark self
+    combinedRows = remote.map((r) =>
+      r.me || (user?.id && r.id === user.id) ? { ...r, me: true, name: meName } : r
+    );
+  } else if (!isSelfOptedOut && !isSelfBelowLimit) {
+    // Self is not in remote, but within active cohort size (< 50) and not opted-out (e.g. C6 tie with peers)
+    combinedRows = [...remote.filter((r) => r.id !== meId), me];
+  } else {
+    // Opted-out or below limit: keep self out of public standings to avoid false placement
+    combinedRows = [...remote];
+  }
+
+  // Sort descending by XP
+  combinedRows.sort((a, b) => b.xp - a.xp);
+
+  // Compute shared ranks for ties
+  let currentRank = 1;
+  let myRank: number | null = null;
+  const rowsWithRanks: LeaderboardRow[] = combinedRows.map((r, i) => {
+    if (i > 0 && r.xp < combinedRows[i - 1].xp) {
+      currentRank = i + 1;
+    }
+    if (r.me) {
+      myRank = currentRank;
+    }
+    return { ...r, rank: currentRank };
+  });
+
+  // If self was below top 50 or opted out, suppress rank
+  if (isSelfBelowLimit || isSelfOptedOut) {
+    myRank = null;
+  }
+
+  const otherClassmatesCount = Math.max(0, rowsWithRanks.length - (rowsWithRanks.some((r) => r.me) ? 1 : 0));
+
+  let subtitle: string;
+  if (myRank !== null) {
+    subtitle = `You're #${myRank} of ${rowsWithRanks.length} participating learners this week with ${weekXp} XP.${nextLeagueText} Standings reflect opted-in learners and reset every Monday at 00:00 UTC.`;
+  } else {
+    subtitle = `You have ${weekXp} XP this week in the ${league.name} League.${nextLeagueText} Standings reflect opted-in learners and reset every Monday at 00:00 UTC.`;
+  }
 
   return {
-    status,
+    status: "active",
     myRank,
-    subtitle: `You're #${myRank} of ${rows.length} participating learners this week with ${weekXp} XP.${nextLeagueText} Standings reflect opted-in learners and reset every Monday at 00:00 UTC.`,
-    rows,
+    subtitle,
+    rows: rowsWithRanks,
     otherClassmatesCount,
   };
 }

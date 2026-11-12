@@ -102,7 +102,7 @@ describe("leaderboard API & state logic", () => {
     expect(state.subtitle).toContain("Complete a lesson to place on the weekly leaderboard!");
   });
 
-  it("authoritatively assigns #1 only when authenticated learner has active XP in an empty league, with opt-in wording", () => {
+  it("truthfully suppresses rank when league response is empty, never claiming an unsupported rank #1", () => {
     const state = computeLeaderboardState({
       status: "empty",
       remote: [],
@@ -110,8 +110,8 @@ describe("leaderboard API & state logic", () => {
       weekXp: 50,
     });
 
-    expect(state.myRank).toBe(1);
-    expect(state.subtitle).toContain("You're #1 among participating learners this week with 50 XP.");
+    expect(state.myRank).toBeNull();
+    expect(state.subtitle).not.toContain("#1");
     expect(state.subtitle).toContain("reset every Monday at 00:00 UTC");
   });
 

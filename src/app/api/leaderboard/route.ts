@@ -18,14 +18,35 @@ export async function GET() {
     currentUserId = null;
   }
 
-  // Minimize public ranking fields: strip raw user_id and username to prevent identifier exposure
-  const rows = (Array.isArray(data) ? data : []).map((r, i) => ({
-    rank: i + 1,
-    display_name: typeof r?.display_name === "string" ? r.display_name : "Learner",
-    avatar: typeof r?.avatar === "string" ? r.avatar : "👤",
-    weekly_xp: typeof r?.weekly_xp === "number" ? Number(r.weekly_xp) : 0,
-    is_self: Boolean(currentUserId && r?.user_id === currentUserId),
-  }));
+  // Parse rows and sanitize weekly_xp (supporting bigint as number or string)
+  const rawRows = (Array.isArray(data) ? data : []).map((r) => {
+    const rawXp = r?.weekly_xp;
+    const weekly_xp =
+      typeof rawXp === "number" && Number.isFinite(rawXp) && rawXp >= 0
+        ? rawXp
+        : typeof rawXp === "string" && !Number.isNaN(Number(rawXp)) && Number(rawXp) >= 0
+        ? Number(rawXp)
+        : 0;
+
+    return {
+      display_name: typeof r?.display_name === "string" ? r.display_name : "Learner",
+      avatar: typeof r?.avatar === "string" ? r.avatar : "👤",
+      weekly_xp,
+      is_self: Boolean(currentUserId && r?.user_id === currentUserId),
+    };
+  });
+
+  // Assign ranks with shared rank for ties (1224 policy)
+  let currentRank = 1;
+  const rows = rawRows.map((r, i) => {
+    if (i > 0 && r.weekly_xp < rawRows[i - 1].weekly_xp) {
+      currentRank = i + 1;
+    }
+    return {
+      rank: currentRank,
+      ...r,
+    };
+  });
 
   return NextResponse.json({ demo: false, rows });
 }
