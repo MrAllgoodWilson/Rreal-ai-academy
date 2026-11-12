@@ -1,3 +1,4 @@
+import { sandboxStorageSafe } from "@/lib/stripe-sandbox-guard";
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe, MONTHLY_PRICE_ID, verifyWebhook } from "@/lib/stripe";
@@ -13,14 +14,20 @@ const ACTIVE = new Set(["active", "trialing", "past_due", "canceled", "unpaid", 
  * Events: checkout.session.completed, checkout.session.async_payment_succeeded, customer.subscription.created|updated|deleted
  */
 export async function POST(req: Request) {
-  const admin = getSupabaseAdmin();
   const checkoutMode = process.env.STRIPE_CHECKOUT_MODE;
   const secretKey = process.env.STRIPE_SECRET_KEY || "";
-  const isSandbox = checkoutMode === "test" || secretKey.startsWith("sk_test_");
-
-  const secret = (isSandbox && process.env.STRIPE_TEST_WEBHOOK_SECRET)
-    ? process.env.STRIPE_TEST_WEBHOOK_SECRET
-    : process.env.STRIPE_WEBHOOK_SECRET;
+  const isSandbox = checkoutMode === "test";
+  const secret = isSandbox ? process.env.STRIPE_TEST_WEBHOOK_SECRET : process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) return NextResponse.json({ error: "Not configured" }, { status: 501 });
+  if ((checkoutMode && !["test", "live"].includes(checkoutMode))
+    || (isSandbox ? !/^(sk|rk)_test_[A-Za-z0-9]+$/.test(secretKey)
+      : !!secretKey && !/^(sk|rk)_live_[A-Za-z0-9]+$/.test(secretKey))) {
+    return NextResponse.json({ error: "Unsafe Stripe configuration" }, { status: 503 });
+  }
+  if (isSandbox && (!sandboxStorageSafe(process.env) || secret === process.env.STRIPE_WEBHOOK_SECRET)) {
+    return NextResponse.json({ error: "Sandbox isolation is not configured" }, { status: 503 });
+  }
+  const admin = getSupabaseAdmin();
 
   if (!admin || !secret) return NextResponse.json({ error: "Not configured" }, { status: 501 });
 
@@ -33,7 +40,8 @@ export async function POST(req: Request) {
   }
 
   // Reject live events in sandbox mode, and reject test events in production mode.
-  if (event.livemode !== undefined) {
+  if (typeof event.livemode !== "boolean") return NextResponse.json({ error: "Invalid livemode" }, { status: 400 });
+  {
     if (isSandbox && event.livemode === true) {
       console.warn("Stripe webhook: livemode mismatch. Sandbox webhook received live event.");
       return NextResponse.json({ error: "Livemode mismatch" }, { status: 400 });
@@ -114,9 +122,6 @@ export async function POST(req: Request) {
       }
       if (!userId) return;
 
-      if (isSandbox && !userId.startsWith("sandbox_") && !userId.startsWith("test_")) {
-        userId = `sandbox_${userId}`;
-      }
 
       const subId = typeof s.subscription === "string" ? s.subscription : s.subscription.id;
       const stripe = getStripe();
@@ -157,13 +162,8 @@ export async function POST(req: Request) {
           break;
         }
 
-        let userId = await resolveUser(sub as never);
+        const userId = await resolveUser(sub as never);
         if (!userId || !ACTIVE.has(sub.status)) break;
-
-        if (isSandbox && !userId.startsWith("sandbox_") && !userId.startsWith("test_")) {
-          userId = `sandbox_${userId}`;
-        }
-
         await upsert({ user_id: userId, stripe_customer_id: customerId(sub.customer), stripe_subscription_id: sub.id, status: sub.status, plan: "monthly", current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null, cancel_at_period_end: sub.cancel_at_period_end });
         break;
       }

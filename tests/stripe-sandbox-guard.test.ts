@@ -1,3 +1,4 @@
+import { isolatedStorage } from "./isolated-storage-fixture";
 import { describe, expect, it } from "vitest";
 import { resolveCheckoutPrice } from "../src/lib/stripe-sandbox-guard";
 
@@ -23,6 +24,7 @@ describe("Rreal internal Stripe sandbox isolation", () => {
 
   it("accepts a distinct test-mode key and price (without proving Stripe entitlement)", () => {
     expect(resolveCheckoutPrice({
+      ...isolatedStorage,
       STRIPE_CHECKOUT_MODE: "test",
       STRIPE_SECRET_KEY: "sk_test_dummyaaa",
       STRIPE_TEST_PRICE_MONTHLY: "price_sandbox123"

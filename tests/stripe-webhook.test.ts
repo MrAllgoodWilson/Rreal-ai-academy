@@ -18,7 +18,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 const { POST } = await import("@/app/api/webhooks/stripe/route");
 const call = () => POST(new Request("http://x/api/webhooks/stripe", { method: "POST", body: "{}", headers: { "stripe-signature": "t" } }));
-const packSession = (over: Record<string, unknown> = {}) => ({ id: "evt_1", type: "checkout.session.completed", data: { object: { id: "cs_1", mode: "payment", payment_status: "paid", client_reference_id: "user-1", payment_link: "plink_1UXs2tK68Pw0CGHvQjKXPZCA", metadata: {}, ...over } } });
+const packSession = (over: Record<string, unknown> = {}) => ({ id: "evt_1", type: "checkout.session.completed", livemode: true, data: { object: { id: "cs_1", mode: "payment", payment_status: "paid", client_reference_id: "user-1", payment_link: "plink_1UXs2tK68Pw0CGHvQjKXPZCA", metadata: {}, ...over } } });
 
 describe("stripe webhook fulfilment", () => {
   beforeEach(() => {
@@ -57,7 +57,7 @@ describe("stripe webhook fulfilment", () => {
   });
   it("returns 500 when saving a membership fails", async () => {
     state.upsertError = { code: "XX000", message: "db down" };
-    event = { id: "evt_2", type: "checkout.session.completed", data: { object: { id: "cs_2", mode: "subscription", subscription: "sub_1", customer: "cus_1", client_reference_id: "user-1", payment_status: "paid" } } };
+    event = { id: "evt_2", type: "checkout.session.completed", livemode: true, data: { object: { id: "cs_2", mode: "subscription", subscription: "sub_1", customer: "cus_1", client_reference_id: "user-1", payment_status: "paid" } } };
     expect((await call()).status).toBe(500);
     expect(state.deleted).toContain("webhook_events:evt_2");
   });
@@ -65,6 +65,7 @@ describe("stripe webhook fulfilment", () => {
     event = {
       id: "evt_foreign",
       type: "checkout.session.completed",
+      livemode: true,
       data: {
         object: {
           id: "cs_foreign",
@@ -85,6 +86,7 @@ describe("stripe webhook fulfilment", () => {
     event = {
       id: "evt_async_sub",
       type: "checkout.session.async_payment_succeeded",
+      livemode: true,
       data: {
         object: {
           id: "cs_async_sub",

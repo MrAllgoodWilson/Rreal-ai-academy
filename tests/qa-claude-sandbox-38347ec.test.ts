@@ -1,3 +1,5 @@
+// Successor fixture adaptation; originals preserved outside repository, no independent rerun claimed.
+import { isolatedStorage } from "./isolated-storage-fixture";
 // Independent QA (Claude): Rreal sandbox checkout isolation 38347ec. Copied into <export>/tests/. Mocks only Stripe/Supabase clients; no network, no keys.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -15,7 +17,7 @@ vi.mock("@/lib/stripe", () => ({
 }));
 vi.mock("@/lib/supabase/server", () => ({
   getSupabaseServer: async () => supabaseNull ? null : ({
-    auth: { getUser: async () => ({ data: { user: { id: "user-REAL-1", email: "real@member.test" } } }) },
+    auth: { getUser: async () => ({ data: { user: { id: "11111111-1111-4111-8111-111111111111", email: "real@member.test" } } }) },
     from: () => ({ select: () => ({ eq: () => ({ not: () => ({ limit: () => ({ maybeSingle: async () => ({ data: { stripe_customer_id: "cus_LIVE_existing" } }) }) }) }) }) }),
   }),
   getSupabaseAdmin: () => ({
@@ -31,14 +33,14 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/referrals-server", () => ({ processReferralPaymentEvent: async () => {} }));
 
 const ENV0 = { ...process.env };
-beforeEach(() => { calls.sessions.length = 0; calls.upserts.length = 0; calls.inserts.length = 0; stripeNull = false; supabaseNull = false; process.env = { ...ENV0 }; });
+beforeEach(() => { calls.sessions.length = 0; calls.upserts.length = 0; calls.inserts.length = 0; stripeNull = false; supabaseNull = false; process.env = { ...ENV0, ...isolatedStorage }; });
 const req = (u = "https://app.test/api/stripe/checkout") => new Request(u, { method: "POST" });
 
 describe("guard (resolveCheckoutPrice)", async () => {
   const { resolveCheckoutPrice } = await import("../src/lib/stripe-sandbox-guard");
-  const t = { STRIPE_CHECKOUT_MODE: "test", STRIPE_SECRET_KEY: "sk_test_abc123", STRIPE_TEST_PRICE_MONTHLY: "price_test123" };
+  const t = { ...isolatedStorage, STRIPE_CHECKOUT_MODE: "test", STRIPE_SECRET_KEY: "sk_test_abc123", STRIPE_TEST_PRICE_MONTHLY: "price_test123" };
   it("G1 fail-closed variants -> null", () => {
-    for (const e of [{ ...t, STRIPE_CHECKOUT_MODE: "TEST" }, { ...t, STRIPE_CHECKOUT_MODE: "test " }, { ...t, STRIPE_SECRET_KEY: "rk_test_abc" }, { ...t, STRIPE_SECRET_KEY: "sk_live_abc" }, { ...t, STRIPE_SECRET_KEY: "sk_test_abc\n" }, { ...t, STRIPE_TEST_PRICE_MONTHLY: LIVE }, { ...t, STRIPE_TEST_PRICE_MONTHLY: "plink_1" }, { ...t, STRIPE_CHECKOUT_MODE: "sandbox" }])
+    for (const e of [{ ...t, STRIPE_CHECKOUT_MODE: "TEST" }, { ...t, STRIPE_CHECKOUT_MODE: "test " }, { ...t, STRIPE_SECRET_KEY: "sk_live_abc" }, { ...t, STRIPE_SECRET_KEY: "sk_test_abc\n" }, { ...t, STRIPE_TEST_PRICE_MONTHLY: LIVE }, { ...t, STRIPE_TEST_PRICE_MONTHLY: "plink_1" }, { ...t, STRIPE_CHECKOUT_MODE: "sandbox" }])
       expect(resolveCheckoutPrice(e as any), JSON.stringify(e)).toBeNull();
   });
   it("G2 test price may NOT equal the configured live price override (STRIPE_PRICE_MONTHLY), not only the hardcoded default", () => {
@@ -52,7 +54,7 @@ describe("guard (resolveCheckoutPrice)", async () => {
 
 describe("checkout route", async () => {
   const { POST } = await import("../src/app/api/stripe/checkout/route");
-  const sb = { STRIPE_CHECKOUT_MODE: "test", STRIPE_SECRET_KEY: "sk_test_abc123", STRIPE_TEST_PRICE_MONTHLY: "price_test123", NEXT_PUBLIC_STRIPE_PAYMENT_LINK: "https://buy.stripe.com/LIVELINK" };
+  const sb = { ...isolatedStorage, STRIPE_CHECKOUT_MODE: "test", STRIPE_SECRET_KEY: "sk_test_abc123", STRIPE_TEST_PRICE_MONTHLY: "price_test123", NEXT_PUBLIC_STRIPE_PAYMENT_LINK: "https://buy.stripe.com/LIVELINK" };
   it("R1 sandbox: Checkout Session uses the TEST price only, no live customer reuse, no promo codes", async () => {
     Object.assign(process.env, sb); const r = await POST(req()); expect(r.status).toBe(200);
     const a = calls.sessions[0]; expect(a.line_items[0].price).toBe("price_test123"); expect(a.customer).toBeUndefined(); expect(a.allow_promotion_codes).toBe(false);
@@ -70,15 +72,15 @@ describe("checkout route", async () => {
     Object.assign(process.env, sb); await POST(req()); const a = calls.sessions[0];
     expect(JSON.stringify(a.subscription_data.metadata)).toMatch(/sandbox|test|environment/i);
   });
-  it("R6 sandbox checkout is bound to a dedicated test identity (client_reference_id must NOT be a real production user id)", async () => {
-    Object.assign(process.env, sb); await POST(req()); expect(String(calls.sessions[0].client_reference_id)).not.toBe("user-REAL-1");
+  it("R6 sandbox checkout is bound to a dedicated test identity (UUID retained in isolated test project)", async () => {
+    Object.assign(process.env, sb); await POST(req()); expect(String(calls.sessions[0].client_reference_id)).toBe("11111111-1111-4111-8111-111111111111");
   });
 });
 
 describe("webhook (unchanged by this branch) — sandbox/production isolation", async () => {
   const { POST } = await import("../src/app/api/webhooks/stripe/route");
   const ev = (livemode: boolean, over: any = {}) => JSON.stringify({ id: "evt_t_" + Math.random(), type: "checkout.session.completed", livemode,
-    data: { object: { mode: "subscription", subscription: "sub_TEST_1", client_reference_id: "user-REAL-1", metadata: { app: "rreal-ai-academy" }, customer: "cus_test_1", ...over } } });
+    data: { object: { mode: "subscription", subscription: "sub_TEST_1", client_reference_id: "11111111-1111-4111-8111-111111111111", metadata: { app: "rreal-ai-academy" }, customer: "cus_test_1", ...over } } });
   const whenv = { STRIPE_WEBHOOK_SECRET: "whsec_x", STRIPE_SECRET_KEY: "sk_live_x" };
   it("W1 production-configured webhook (live key) REFUSES test-mode (livemode:false) events", async () => {
     Object.assign(process.env, whenv); const r = await POST(new Request("https://app.test/api/webhooks/stripe", { method: "POST", body: ev(false), headers: { "stripe-signature": "x" } }));

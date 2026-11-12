@@ -24,9 +24,7 @@ export async function POST(req: Request) {
   if (stripe) {
     // Sandbox customer IDs are separate from live Stripe customer IDs.
     const existing = checkout.sandbox ? null : (await sb.from("subscriptions").select("stripe_customer_id").eq("user_id", auth.user.id).not("stripe_customer_id", "is", null).limit(1).maybeSingle()).data;
-    const clientId = checkout.sandbox
-      ? (auth.user.id.startsWith("sandbox_") || auth.user.id.startsWith("test_") ? auth.user.id : `sandbox_${auth.user.id}`)
-      : auth.user.id;
+    const clientId = auth.user.id;
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",

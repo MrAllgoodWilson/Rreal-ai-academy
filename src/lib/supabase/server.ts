@@ -1,4 +1,5 @@
 import "server-only";
+import { sandboxStorageSafe } from "@/lib/stripe-sandbox-guard";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -6,6 +7,7 @@ import { supabaseConfigured } from "@/lib/config";
 
 /** Per-request Supabase client acting as the signed-in user (RLS applies). */
 export async function getSupabaseServer(): Promise<SupabaseClient | null> {
+  if (process.env.STRIPE_CHECKOUT_MODE === "test" && !sandboxStorageSafe(process.env)) return null;
   if (!supabaseConfigured) return null;
   const store = await cookies();
   return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
@@ -24,6 +26,7 @@ export async function getSupabaseServer(): Promise<SupabaseClient | null> {
 
 /** Service-role client. Bypasses RLS — server-only, use sparingly (webhooks, username recovery). */
 export function getSupabaseAdmin(): SupabaseClient | null {
+  if (process.env.STRIPE_CHECKOUT_MODE === "test" && !sandboxStorageSafe(process.env)) return null;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
