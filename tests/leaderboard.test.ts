@@ -1,7 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { leagueFor } from "@/lib/gamification";
 import { GET } from "@/app/api/leaderboard/route";
-import { computeLeaderboardState, type LeaderboardRow } from "@/lib/leaderboard";
+import {
+  calculateWeeklyXp,
+  computeLeaderboardState,
+  getMondayOfWeek,
+  type LeaderboardRow,
+} from "@/lib/leaderboard";
 
 describe("leaderboard API & state logic", () => {
   beforeEach(() => {
@@ -16,12 +21,39 @@ describe("leaderboard API & state logic", () => {
     expect(data.rows).toEqual([]);
   });
 
+  it("calculates Monday 00:00:00 UTC start of week correctly across week boundaries", () => {
+    // Wednesday 2026-11-11 15:30:00 UTC -> Monday 2026-11-09 00:00:00 UTC
+    const wed = new Date("2026-11-11T15:30:00Z");
+    const monWed = getMondayOfWeek(wed);
+    expect(monWed.toISOString()).toBe("2026-11-09T00:00:00.000Z");
+
+    // Sunday 2026-11-15 23:59:59 UTC -> Monday 2026-11-09 00:00:00 UTC
+    const sun = new Date("2026-11-15T23:59:59Z");
+    const monSun = getMondayOfWeek(sun);
+    expect(monSun.toISOString()).toBe("2026-11-09T00:00:00.000Z");
+
+    // Monday 2026-11-16 00:00:01 UTC -> Monday 2026-11-16 00:00:00 UTC
+    const nextMon = new Date("2026-11-16T00:00:01Z");
+    const monNext = getMondayOfWeek(nextMon);
+    expect(monNext.toISOString()).toBe("2026-11-16T00:00:00.000Z");
+  });
+
+  it("calculates weekly XP strictly aligned with Monday UTC reset, ignoring previous week XP", () => {
+    const fixedNow = new Date("2026-11-11T12:00:00Z"); // Wednesday
+    const xpByDay = {
+      "2026-11-08": 100, // Sunday of previous week (must be excluded)
+      "2026-11-09": 30,  // Monday (included)
+      "2026-11-10": 20,  // Tuesday (included)
+      "2026-11-11": 15,  // Wednesday (included)
+    };
+
+    const weekXp = calculateWeeklyXp(xpByDay, fixedNow);
+    expect(weekXp).toBe(65); // 30 + 20 + 15 = 65 (excludes 100 from Sunday)
+  });
+
   it("calculates weekly league accurately and safe against empty xpByDay", () => {
     const xpByDayEmpty: Record<string, number> = {};
-    const weekXp = Object.entries(xpByDayEmpty)
-      .filter(([k]) => Date.now() - new Date(k).getTime() < 7 * 86_400_000)
-      .reduce((a, [, v]) => a + v, 0);
-
+    const weekXp = calculateWeeklyXp(xpByDayEmpty);
     expect(weekXp).toBe(0);
     const league = leagueFor(weekXp);
     expect(league.id).toBe("bronze");
@@ -70,7 +102,7 @@ describe("leaderboard API & state logic", () => {
     expect(state.subtitle).toContain("Complete a lesson to place on the weekly leaderboard!");
   });
 
-  it("authoritatively assigns #1 only when authenticated learner has active XP in an empty league", () => {
+  it("authoritatively assigns #1 only when authenticated learner has active XP in an empty league, with opt-in wording", () => {
     const state = computeLeaderboardState({
       status: "empty",
       remote: [],
@@ -79,10 +111,11 @@ describe("leaderboard API & state logic", () => {
     });
 
     expect(state.myRank).toBe(1);
-    expect(state.subtitle).toContain("You're #1 this week with 50 XP.");
+    expect(state.subtitle).toContain("You're #1 among participating learners this week with 50 XP.");
+    expect(state.subtitle).toContain("reset every Monday at 00:00 UTC");
   });
 
-  it("sorts learner row into genuine peers accurately without exposing private fields", () => {
+  it("sorts learner row into genuine peers accurately with opt-in wording without exposing private fields", () => {
     const peers: LeaderboardRow[] = [
       { id: "peer-1", name: "Genuine Classmate 1", avatar: "🦄", xp: 120 },
       { id: "peer-2", name: "Genuine Classmate 2", avatar: "🐼", xp: 40 },
@@ -101,11 +134,14 @@ describe("leaderboard API & state logic", () => {
     expect(state.rows[1].name).toBe("AL (you)");
     expect(state.rows[2].name).toBe("Genuine Classmate 2");
     expect(state.myRank).toBe(2);
-    expect(state.subtitle).toContain("You're #2 of 3 this week with 50 XP.");
+    expect(state.subtitle).toContain("You're #2 of 3 participating learners this week with 50 XP.");
+    expect(state.subtitle).toContain("Standings reflect opted-in learners");
 
-    // Verify zero private fields leak
+    // Verify zero private fields (user_id, username, email, token, password) leak
     for (const r of state.rows) {
       const item = r as unknown as Record<string, unknown>;
+      expect(item.user_id).toBeUndefined();
+      expect(item.username).toBeUndefined();
       expect(item.email).toBeUndefined();
       expect(item.token).toBeUndefined();
       expect(item.password).toBeUndefined();

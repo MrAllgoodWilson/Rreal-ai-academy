@@ -18,6 +18,31 @@ export interface LeaderboardComputedState {
   otherClassmatesCount: number;
 }
 
+/**
+ * Calculates the start of the week (Monday 00:00:00.000 UTC),
+ * matching PostgreSQL's date_trunc('week', now()).
+ */
+export function getMondayOfWeek(d: Date = new Date()): Date {
+  const date = new Date(d);
+  const day = date.getUTCDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+  const diff = (day + 6) % 7; // days since previous Monday
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - diff, 0, 0, 0, 0));
+}
+
+/**
+ * Calculates the learner's weekly XP aligned with the Monday 00:00:00 UTC cycle.
+ */
+export function calculateWeeklyXp(xpByDay?: Record<string, number> | null, now: Date = new Date()): number {
+  if (!xpByDay || typeof xpByDay !== "object") return 0;
+  const mondayTime = getMondayOfWeek(now).getTime();
+  return Object.entries(xpByDay)
+    .filter(([k]) => {
+      const time = new Date(k.includes("T") ? k : `${k}T00:00:00Z`).getTime();
+      return !Number.isNaN(time) && time >= mondayTime;
+    })
+    .reduce((a, [, v]) => a + (typeof v === "number" && !Number.isNaN(v) ? v : 0), 0);
+}
+
 export function computeLeaderboardState({
   status,
   remote,
@@ -62,7 +87,7 @@ export function computeLeaderboardState({
       return {
         status,
         myRank: 1,
-        subtitle: `You're #1 this week with ${weekXp} XP.${nextLeagueText} Leagues reset every Monday.`,
+        subtitle: `You're #1 among participating learners this week with ${weekXp} XP.${nextLeagueText} Standings reflect opted-in learners and reset every Monday at 00:00 UTC.`,
         rows: [me],
         otherClassmatesCount: 0,
       };
@@ -85,7 +110,7 @@ export function computeLeaderboardState({
   return {
     status,
     myRank,
-    subtitle: `You're #${myRank} of ${rows.length} this week with ${weekXp} XP.${nextLeagueText} Leagues reset every Monday.`,
+    subtitle: `You're #${myRank} of ${rows.length} participating learners this week with ${weekXp} XP.${nextLeagueText} Standings reflect opted-in learners and reset every Monday at 00:00 UTC.`,
     rows,
     otherClassmatesCount,
   };

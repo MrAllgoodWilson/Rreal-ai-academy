@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { useAcademy } from "@/lib/store";
 import { leagueFor } from "@/lib/gamification";
 import {
+  calculateWeeklyXp,
   computeLeaderboardState,
   type LeaderboardRow,
   type LeaderboardStatus,
@@ -63,14 +64,9 @@ function Board() {
   const [status, setStatus] = useState<LeaderboardStatus>("loading");
   const [remote, setRemote] = useState<LeaderboardRow[] | null>(null);
 
+  // Aligned with Postgres date_trunc('week', now()) - resets Monday 00:00:00 UTC
   const weekXp = useMemo(() => {
-    if (!progress?.xpByDay || typeof progress.xpByDay !== "object") return 0;
-    return Object.entries(progress.xpByDay)
-      .filter(([k]) => {
-        const time = new Date(k).getTime();
-        return !Number.isNaN(time) && Date.now() - time < 7 * 86_400_000;
-      })
-      .reduce((a, [, v]) => a + (typeof v === "number" && !Number.isNaN(v) ? v : 0), 0);
+    return calculateWeeklyXp(progress?.xpByDay);
   }, [progress?.xpByDay]);
 
   useEffect(() => {
@@ -89,19 +85,20 @@ function Board() {
           setStatus("active");
           setRemote(
             j.rows.map(
-              (r: {
-                user_id?: string;
-                id?: string;
-                display_name?: string;
-                name?: string;
-                avatar?: string;
-                weekly_xp?: number;
-                xp?: number;
-              }) => ({
-                id: r.user_id ?? r.id ?? `peer-${Math.random()}`,
-                name: r.display_name ?? r.name ?? "Learner",
+              (
+                r: {
+                  display_name?: string;
+                  avatar?: string;
+                  weekly_xp?: number;
+                  is_self?: boolean;
+                },
+                idx: number
+              ) => ({
+                id: r.is_self ? (user?.id ?? "me") : `peer-${idx}`,
+                name: r.display_name ?? "Learner",
                 avatar: r.avatar ?? "👤",
-                xp: typeof r.weekly_xp === "number" ? r.weekly_xp : (typeof r.xp === "number" ? r.xp : 0),
+                xp: typeof r.weekly_xp === "number" ? r.weekly_xp : 0,
+                me: Boolean(r.is_self),
               })
             )
           );
@@ -116,7 +113,7 @@ function Board() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [user?.id]);
 
   const computed = useMemo(() => {
     return computeLeaderboardState({ status, remote, user, weekXp });
@@ -153,8 +150,17 @@ function Board() {
       {computed.status === "empty" && (
         <div className="mb-6 rounded-2xl border border-lime/40 bg-lime/10 p-4 text-sm text-lime">
           {weekXp > 0
-            ? "You are the first learner on the leaderboard this week! Keep learning to maintain your lead."
-            : "No learners have placed on the leaderboard this week yet. Complete a lesson to take first place!"}
+            ? "You are currently the first participating learner on the leaderboard this week! Standings include classmates who opted in to share weekly progress."
+            : "No participating learners have placed on the leaderboard this week yet. Complete a lesson to take the lead among opted-in classmates!"}
+        </div>
+      )}
+
+      {computed.status === "active" && (
+        <div className="mb-6 rounded-2xl border border-line bg-surface/60 p-3 text-xs text-muted">
+          <p className="flex items-center gap-2">
+            <Users className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
+            Standings reflect participating classmates who opted in to the weekly leaderboard. Resets every Monday at 00:00 UTC.
+          </p>
         </div>
       )}
 
