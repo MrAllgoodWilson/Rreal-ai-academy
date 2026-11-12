@@ -24,13 +24,28 @@ export async function POST(req: Request) {
   if (stripe) {
     // Sandbox customer IDs are separate from live Stripe customer IDs.
     const existing = checkout.sandbox ? null : (await sb.from("subscriptions").select("stripe_customer_id").eq("user_id", auth.user.id).not("stripe_customer_id", "is", null).limit(1).maybeSingle()).data;
+    const clientId = checkout.sandbox
+      ? (auth.user.id.startsWith("sandbox_") || auth.user.id.startsWith("test_") ? auth.user.id : `sandbox_${auth.user.id}`)
+      : auth.user.id;
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: checkout.priceId, quantity: 1 }],
-      client_reference_id: auth.user.id,
+      client_reference_id: clientId,
       customer: existing?.stripe_customer_id ?? undefined,
       customer_email: existing?.stripe_customer_id ? undefined : auth.user.email,
-      subscription_data: { metadata: { user_id: auth.user.id, plan: "monthly", app: "rreal-ai-academy" } },
+      subscription_data: {
+        metadata: {
+          user_id: clientId,
+          plan: "monthly",
+          app: "rreal-ai-academy",
+          ...(checkout.sandbox ? { environment: "sandbox" } : {}),
+        },
+      },
+      metadata: {
+        app: "rreal-ai-academy",
+        ...(checkout.sandbox ? { environment: "sandbox" } : {}),
+      },
       allow_promotion_codes: !checkout.sandbox,
       success_url: `${site}/subscribe?checkout=success`,
       cancel_url: `${site}/subscribe?checkout=cancelled`,

@@ -5,7 +5,6 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { processReferralPaymentEvent } from "@/lib/referrals-server";
 import { CREDIT_PACKS, packByPaymentLink } from "@/lib/credits";
 
-
 const ACTIVE = new Set(["active", "trialing", "past_due", "canceled", "unpaid", "incomplete", "incomplete_expired", "paused"]);
 
 /**
@@ -15,7 +14,14 @@ const ACTIVE = new Set(["active", "trialing", "past_due", "canceled", "unpaid", 
  */
 export async function POST(req: Request) {
   const admin = getSupabaseAdmin();
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  const checkoutMode = process.env.STRIPE_CHECKOUT_MODE;
+  const secretKey = process.env.STRIPE_SECRET_KEY || "";
+  const isSandbox = checkoutMode === "test" || secretKey.startsWith("sk_test_");
+
+  const secret = (isSandbox && process.env.STRIPE_TEST_WEBHOOK_SECRET)
+    ? process.env.STRIPE_TEST_WEBHOOK_SECRET
+    : process.env.STRIPE_WEBHOOK_SECRET;
+
   if (!admin || !secret) return NextResponse.json({ error: "Not configured" }, { status: 501 });
 
   const raw = await req.text();
@@ -24,6 +30,18 @@ export async function POST(req: Request) {
     event = await verifyWebhook(raw, req.headers.get("stripe-signature") ?? "", secret);
   } catch {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+  }
+
+  // Reject live events in sandbox mode, and reject test events in production mode.
+  if (event.livemode !== undefined) {
+    if (isSandbox && event.livemode === true) {
+      console.warn("Stripe webhook: livemode mismatch. Sandbox webhook received live event.");
+      return NextResponse.json({ error: "Livemode mismatch" }, { status: 400 });
+    }
+    if (!isSandbox && event.livemode === false) {
+      console.warn("Stripe webhook: livemode mismatch. Production webhook received test event.");
+      return NextResponse.json({ error: "Livemode mismatch" }, { status: 400 });
+    }
   }
 
   const { error: dup } = await admin.from("webhook_events").insert({ id: event.id, type: event.type });
@@ -81,6 +99,12 @@ export async function POST(req: Request) {
       const link = typeof s.payment_link === "string" ? s.payment_link : s.payment_link?.id;
       if (link && link.startsWith("plink_NOT_RREAL")) return;
 
+      // Reject sandbox checkout in production webhook
+      if (!isSandbox && (s.metadata?.environment === "sandbox" || s.metadata?.sandbox === "true")) {
+        console.warn("Stripe webhook: rejected sandbox checkout in production webhook");
+        return;
+      }
+
       // Resolve learner: use client_reference_id, or fall back to customer email (R-5 guard)
       let userId = s.client_reference_id;
       if (!userId && (s.customer_details?.email || s.customer_email)) {
@@ -89,6 +113,10 @@ export async function POST(req: Request) {
         userId = userRec?.id ?? null;
       }
       if (!userId) return;
+
+      if (isSandbox && !userId.startsWith("sandbox_") && !userId.startsWith("test_")) {
+        userId = `sandbox_${userId}`;
+      }
 
       const subId = typeof s.subscription === "string" ? s.subscription : s.subscription.id;
       const stripe = getStripe();
@@ -122,8 +150,20 @@ export async function POST(req: Request) {
         const sub = event.data.object as Stripe.Subscription;
         if (sub.metadata?.business && sub.metadata.business !== "rreal") break;
         if (sub.metadata?.app && sub.metadata.app !== "rreal-ai-academy") break;
-        const userId = await resolveUser(sub as never);
+
+        // Reject sandbox subscription in production webhook
+        if (!isSandbox && (sub.metadata?.environment === "sandbox" || sub.metadata?.sandbox === "true")) {
+          console.warn("Stripe webhook: rejected sandbox subscription in production webhook");
+          break;
+        }
+
+        let userId = await resolveUser(sub as never);
         if (!userId || !ACTIVE.has(sub.status)) break;
+
+        if (isSandbox && !userId.startsWith("sandbox_") && !userId.startsWith("test_")) {
+          userId = `sandbox_${userId}`;
+        }
+
         await upsert({ user_id: userId, stripe_customer_id: customerId(sub.customer), stripe_subscription_id: sub.id, status: sub.status, plan: "monthly", current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null, cancel_at_period_end: sub.cancel_at_period_end });
         break;
       }
