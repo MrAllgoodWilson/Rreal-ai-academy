@@ -5,7 +5,7 @@ const livePrice = "price_1UXevHK68Pw0CGHvMMNt6NeD";
 
 describe("Rreal internal Stripe sandbox isolation", () => {
   it("preserves existing live price when sandbox mode is not selected", () => {
-    expect(resolveCheckoutPrice({} as NodeJS.ProcessEnv)).toEqual({ priceId: livePrice, sandbox: false });
+    expect(resolveCheckoutPrice({} as unknown as NodeJS.ProcessEnv)).toEqual({ priceId: livePrice, sandbox: false });
   });
 
   it("rejects sandbox without an explicitly configured test-only key and distinct test price", () => {
@@ -17,7 +17,7 @@ describe("Rreal internal Stripe sandbox isolation", () => {
       { STRIPE_CHECKOUT_MODE: "test", STRIPE_SECRET_KEY: "sk_test_dummyaaa", STRIPE_TEST_PRICE_MONTHLY: "invalid" },
       { STRIPE_CHECKOUT_MODE: "unknown" },
     ]) {
-      expect(resolveCheckoutPrice(env as NodeJS.ProcessEnv)).toBe(null);
+      expect(resolveCheckoutPrice(env as unknown as NodeJS.ProcessEnv)).toBe(null);
     }
   });
 
@@ -26,6 +26,6 @@ describe("Rreal internal Stripe sandbox isolation", () => {
       STRIPE_CHECKOUT_MODE: "test",
       STRIPE_SECRET_KEY: "sk_test_dummyaaa",
       STRIPE_TEST_PRICE_MONTHLY: "price_sandbox123"
-    } as NodeJS.ProcessEnv)).toEqual({ priceId: "price_sandbox123", sandbox: true });
+    } as unknown as NodeJS.ProcessEnv)).toEqual({ priceId: "price_sandbox123", sandbox: true });
   });
 });
