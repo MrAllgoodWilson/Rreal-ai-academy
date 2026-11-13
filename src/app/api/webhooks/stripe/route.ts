@@ -5,6 +5,7 @@ import * as StripeLib from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { processReferralPaymentEvent } from "@/lib/referrals-server";
 import { CREDIT_PACKS, packByPaymentLink } from "@/lib/credits";
+import { getDefaultFoundersRulesEngine } from "@/lib/founders";
 
 const getStripe = StripeLib.getStripe;
 const verifyWebhook = StripeLib.verifyWebhook;
@@ -312,6 +313,23 @@ export async function POST(req: Request) {
         break;
       }
     }
+        // Wire Founders rules engine for managed Founders subscriptions
+    const foundersPrices = [
+      process.env.STRIPE_FOUNDERS_PRICE_ID,
+      process.env.NEXT_PUBLIC_STRIPE_FOUNDERS_PRICE_ID,
+    ].filter(Boolean);
+
+    const eventSub = (event.data?.object as any);
+    const eventPriceId = eventSub?.items?.data?.[0]?.price?.id;
+    if (foundersPrices.length > 0 && eventPriceId && foundersPrices.includes(eventPriceId)) {
+      try {
+        const engine = getDefaultFoundersRulesEngine();
+        await engine.processSubscriptionWebhook("rreal", event as any);
+      } catch (engineErr) {
+        console.warn("Founders rules engine webhook processing warning:", engineErr);
+      }
+    }
+
     await processReferralPaymentEvent(event, admin, getStripe());
   } catch (e) {
 

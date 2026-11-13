@@ -10,6 +10,7 @@ import {
   FoundersOffer,
   RateForfeitedException,
   computeTermsHash,
+  setDefaultFoundersRulesEngine,
 } from "@/lib/founders";
 
 vi.mock("server-only", () => ({}));
@@ -169,6 +170,7 @@ describe("Founders Beta — Isolated Stripe Test Payment -> Usable Service -> Ca
       updatedAt: new Date().toISOString(),
     };
     await rulesStore.saveOffer(offer);
+    setDefaultFoundersRulesEngine(rulesEngine);
   });
 
   it("Step 1 -> 5: Full verified isolated lifecycle demonstration", async () => {
@@ -193,9 +195,9 @@ describe("Founders Beta — Isolated Stripe Test Payment -> Usable Service -> Ca
       method: "POST",
     });
     const checkoutRes = await checkoutPost(checkoutReq);
+    const checkoutJson = await checkoutRes.json();
     expect(checkoutRes.status).toBe(200);
 
-    const checkoutJson = await checkoutRes.json();
     expect(checkoutJson.url).toContain("cs_test_founders_1");
     expect(db.sessions.length).toBe(1);
     expect(db.sessions[0].client_reference_id).toBe(USER_ID);

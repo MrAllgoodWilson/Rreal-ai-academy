@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { resolveCheckoutPrice } from "@/lib/stripe-sandbox-guard";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { getDefaultFoundersRulesEngine, RateForfeitedException } from "@/lib/founders";
 
 /**
  * Starts the membership checkout session.
@@ -35,6 +36,31 @@ export async function POST(req: Request) {
       { error: "Account already has an active or forfeited subscription. Cannot start a second checkout." },
       { status: 400 },
     );
+  }
+
+  // Founders Beta qualification check via rules engine
+  const isFounders = [
+    process.env.STRIPE_FOUNDERS_PRICE_ID,
+    process.env.NEXT_PUBLIC_STRIPE_FOUNDERS_PRICE_ID,
+  ].filter(Boolean).includes(checkout.priceId);
+
+  if (isFounders) {
+    try {
+      const engine = getDefaultFoundersRulesEngine();
+      await engine.qualifyAccount(
+        "rreal",
+        {
+          accountId: auth.user.id,
+          registeredAt: auth.user.created_at || new Date().toISOString(),
+          authVerified: true,
+        },
+      );
+    } catch (err) {
+      if (err instanceof RateForfeitedException) {
+        return NextResponse.json({ error: "Founders rate permanently forfeited." }, { status: 403 });
+      }
+      return NextResponse.json({ error: (err as Error).message || "Founders qualification failed." }, { status: 400 });
+    }
   }
 
   const site = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin;

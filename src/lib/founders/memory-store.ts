@@ -7,6 +7,7 @@ import {
   FoundersOffer,
 } from './types';
 import { IFoundersStore, IneligibleAccountException } from './rules-engine';
+import { COMPANY_PILOT_CONFIG } from './company-inventory';
 
 /**
  * In-memory test store implementing IFoundersStore with full signal persistence,
@@ -25,7 +26,29 @@ export class MemoryFoundersStore implements IFoundersStore {
   private identitySignalIndex = new Map<string, string>();
 
   async getOffer(companyId: CompanyId): Promise<FoundersOffer | null> {
-    return this.offers.get(companyId) || null;
+    const existing = this.offers.get(companyId);
+    if (existing) return existing;
+    const cfg = COMPANY_PILOT_CONFIG[companyId];
+    if (cfg) {
+      const defaultOffer: FoundersOffer = {
+        id: `offer_${companyId}_founders_v1`,
+        companyId,
+        merchantContext: `${companyId}-founders-beta`,
+        offerVersion: 1,
+        currency: 'usd',
+        unitAmount: 499,
+        billingInterval: 'month',
+        state: 'active',
+        deliverables: ['standard_founders_access'],
+        betaTermsVersion: '2026-11-12',
+        termsHash: 'default_terms_hash',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      this.offers.set(companyId, defaultOffer);
+      return defaultOffer;
+    }
+    return null;
   }
 
   async saveOffer(offer: FoundersOffer): Promise<void> {
