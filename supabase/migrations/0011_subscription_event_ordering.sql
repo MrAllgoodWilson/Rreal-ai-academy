@@ -242,7 +242,10 @@ begin
      and (b.stripe_subscription_id is null or b.stripe_subscription_id = p_sub_id)
   returning b.kind, b.price_id, b.company, b.user_id into v;
   if not found then
-    return jsonb_build_object('bound', false);
+    -- 'unknown_session' = we never recorded this session; 'mismatch' = recorded, but for another account/mode/subscription.
+    return jsonb_build_object('bound', false, 'reason',
+      case when exists (select 1 from public.checkout_bindings where session_id = p_session_id)
+           then 'mismatch' else 'unknown_session' end);
   end if;
   return jsonb_build_object('bound', true, 'kind', v.kind, 'price_id', v.price_id,
                             'company', v.company, 'user_id', v.user_id);
@@ -272,4 +275,49 @@ begin
       execute format('grant execute on function %s to service_role', f);
     end if;
   end loop;
+end $$;
+
+-- Resolves the account a subscription belongs to from SERVER-PERSISTED state only:
+-- the checkout binding written by our authenticated checkout route, else an existing mirror row.
+-- Never consults event metadata, e-mail or customer-id similarity. Returns null when unknown.
+create or replace function public.resolve_subscription_account(p_sub_id text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  b record;
+  s record;
+begin
+  if p_sub_id is null or length(p_sub_id) = 0 then
+    return null;
+  end if;
+  select user_id, kind, price_id, company, livemode into b
+    from public.checkout_bindings where stripe_subscription_id = p_sub_id;
+  if found then
+    return jsonb_build_object('user_id', b.user_id, 'kind', b.kind, 'price_id', b.price_id,
+                              'company', b.company, 'livemode', b.livemode, 'source', 'checkout_binding');
+  end if;
+  select user_id into s from public.subscriptions where stripe_subscription_id = p_sub_id;
+  if found then
+    return jsonb_build_object('user_id', s.user_id, 'kind', 'legacy_monthly', 'source', 'subscription_row');
+  end if;
+  return null;
+end;
+$$;
+
+do $$
+begin
+  revoke all on function public.resolve_subscription_account(text) from public;
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    revoke all on function public.resolve_subscription_account(text) from anon;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then
+    revoke all on function public.resolve_subscription_account(text) from authenticated;
+  end if;
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.resolve_subscription_account(text) to service_role;
+  end if;
 end $$;

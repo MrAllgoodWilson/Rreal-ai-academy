@@ -5,97 +5,47 @@ import * as StripeLib from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { processReferralPaymentEvent } from "@/lib/referrals-server";
 import { CREDIT_PACKS, packByPaymentLink } from "@/lib/credits";
-import { getDefaultFoundersRulesEngine } from "@/lib/founders-engine";
+import {
+  applyFoundersSubscription,
+  configuredFoundersPriceId,
+  isFoundersPriced,
+  type FoundersSubscriptionLike,
+} from "@/lib/founders-webhook";
 
 const getStripe = StripeLib.getStripe;
 const verifyWebhook = StripeLib.verifyWebhook;
-const getMonthlyPriceId = () => process.env.STRIPE_PRICE_MONTHLY || "price_1UXevHK68Pw0CGHvMMNt6NeD";
 
-const ACTIVE = new Set(["active", "trialing", "past_due", "canceled", "unpaid", "incomplete", "incomplete_expired", "paused"]);
+/** Statuses the membership mirror stores (the table's check constraint is the authority). */
+const MIRRORED = new Set(["active", "trialing", "past_due", "canceled", "unpaid", "incomplete", "incomplete_expired", "paused"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function isStaleSubscriptionEvent(
-  existingStatus: string,
-  existingTimestampMs: number,
-  incomingStatus: string,
-  incomingEventCreatedSec: number,
-): boolean {
-  const incomingTimeMs = incomingEventCreatedSec * 1000;
-  if (incomingTimeMs < existingTimestampMs) {
-    return true;
-  }
-  if (incomingTimeMs === existingTimestampMs) {
-    if (existingStatus === "canceled" && incomingStatus !== "canceled") {
-      return true;
-    }
-    if (incomingStatus === "canceled" && existingStatus !== "canceled") {
-      return false;
-    }
-    const priority: Record<string, number> = {
-      canceled: 5,
-      unpaid: 4,
-      past_due: 3,
-      incomplete_expired: 2,
-      active: 1,
-      trialing: 1,
-      incomplete: 0,
-      paused: 0,
-    };
-    return (priority[existingStatus] ?? 0) > (priority[incomingStatus] ?? 0);
-  }
-  return false;
-}
-
-/**
- * Durable event ordering helper:
- * Queries persisted subscription in Postgres across worker isolates.
- * Propagates database query errors immediately (fails closed).
- */
-async function isEventStaleInDatabase(
-  admin: any,
-  subId: string,
-  eventCreated: number,
-  status: string,
-): Promise<boolean> {
-  if (!subId || !eventCreated || !admin) return false;
-
-  const { data: row, error } = await admin
-    .from("subscriptions")
-    .select("status, last_event_created, updated_at")
-    .eq("stripe_subscription_id", subId)
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`subscription order query failed: ${error.message ?? error.code ?? "unknown"}`);
-  }
-
-  if (row) {
-    const existingTimeMs = typeof row.last_event_created === "number"
-      ? row.last_event_created * 1000
-      : (row.updated_at ? new Date(row.updated_at).getTime() : 0);
-    return isStaleSubscriptionEvent(row.status, existingTimeMs, status, eventCreated);
-  }
-
-  return false;
-}
-
-// F6 [E8/E9]: Price allow-list: strictly derived from configured prices
+/** Price allow-list: only prices this deployment is configured to sell. */
 function getAllowedPriceIds(): Set<string> {
   return new Set(
     [
       process.env.STRIPE_PRICE_MONTHLY,
-      (StripeLib as any).MONTHLY_PRICE_ID,
+      (StripeLib as { MONTHLY_PRICE_ID?: string }).MONTHLY_PRICE_ID,
       process.env.STRIPE_TEST_PRICE_MONTHLY,
-      process.env.STRIPE_FOUNDERS_PRICE_ID,
-      process.env.NEXT_PUBLIC_STRIPE_FOUNDERS_PRICE_ID,
+      configuredFoundersPriceId(),
       "price_1UXevHK68Pw0CGHvMMNt6NeD",
     ].filter(Boolean) as string[],
   );
 }
 
+interface DbError { code?: string; message?: string }
+interface AccountResolution { user_id: string; kind: string; price_id?: string; company?: string; livemode?: boolean; source: string }
+
 /**
- * Stripe webhook: verifies the signature, then idempotently mirrors membership state into Postgres.
- * Events: checkout.session.completed, checkout.session.async_payment_succeeded, customer.subscription.created|updated|deleted
+ * Stripe webhook.
+ *
+ * Durability contract (migration 0011):
+ *  - The event is claimed as 'processing' and only marked 'processed' after every effect has been applied. Any error or
+ *    crash leaves it 'processing', the handler answers 500, and the provider retry re-runs the effects, which are all
+ *    idempotent (ordered mirror upsert, per-session credit grant, per-event Founders engine claim).
+ *  - The membership mirror is written by ONE atomic SQL statement (upsert_subscription_ordered). There is no
+ *    read-then-write path: a missing function, an error, or an unexpected result all fail closed.
+ *  - The account for a subscription comes from server-persisted state only (checkout binding or an existing mirror
+ *    row), never from event metadata or e-mail.
  */
 export async function POST(req: Request) {
   const checkoutMode = process.env.STRIPE_CHECKOUT_MODE;
@@ -112,8 +62,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Sandbox isolation is not configured" }, { status: 503 });
   }
   const admin = getSupabaseAdmin();
-
-  if (!admin || !secret) return NextResponse.json({ error: "Not configured" }, { status: 501 });
+  if (!admin) return NextResponse.json({ error: "Not configured" }, { status: 501 });
 
   const raw = await req.text();
   let event: Stripe.Event;
@@ -123,258 +72,225 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
-  // Reject live events in sandbox mode, and reject test events in production mode.
+  // Reject live events in sandbox mode, and test events in production mode.
   if (typeof event.livemode !== "boolean") return NextResponse.json({ error: "Invalid livemode" }, { status: 400 });
-  {
-    if (isSandbox && event.livemode === true) {
-      console.warn("Stripe webhook: livemode mismatch. Sandbox webhook received live event.");
-      return NextResponse.json({ error: "Livemode mismatch" }, { status: 400 });
+  if (isSandbox === event.livemode) {
+    console.warn("Stripe webhook: livemode mismatch");
+    return NextResponse.json({ error: "Livemode mismatch" }, { status: 400 });
+  }
+  if (typeof event.id !== "string" || !event.id) return NextResponse.json({ error: "Invalid event" }, { status: 400 });
+
+  /** Calls a SQL function; any transport/database error throws (fail closed, retryable). */
+  const rpc = async <T>(fn: string, args: Record<string, unknown>, what: string, tolerate?: (e: DbError) => boolean): Promise<T | null> => {
+    const { data, error } = (await admin.rpc(fn, args)) as { data: T | null; error: DbError | null };
+    if (error) {
+      if (tolerate?.(error)) return null;
+      throw new Error(`${what} failed: ${error.message ?? error.code ?? "unknown"}`);
     }
-    if (!isSandbox && event.livemode === false) {
-      console.warn("Stripe webhook: livemode mismatch. Production webhook received test event.");
-      return NextResponse.json({ error: "Livemode mismatch" }, { status: 400 });
-    }
+    return data;
+  };
+
+  // 1. Claim. 'duplicate' = already fully processed. Anything other than new/retry is an invalid result.
+  let claim: string | null;
+  try {
+    claim = await rpc<string>("claim_webhook_event", { p_id: event.id, p_type: event.type }, "event claim");
+  } catch (e) {
+    console.error("Stripe webhook failed", e);
+    return NextResponse.json({ error: "Handler failed" }, { status: 500 });
+  }
+  if (claim === "duplicate") return NextResponse.json({ received: true, duplicate: true });
+  if (claim !== "new" && claim !== "retry") {
+    console.error("Stripe webhook failed: invalid claim result");
+    return NextResponse.json({ error: "Handler failed" }, { status: 500 });
   }
 
-  const { error: dup } = await admin.from("webhook_events").insert({ id: event.id, type: event.type });
-  if (dup?.code === "23505") return NextResponse.json({ received: true, duplicate: true });
-
   const customerId = (c: string | { id: string } | null | undefined) => (typeof c === "string" ? c : c?.id ?? null);
-
-  /** Find which learner a Stripe subscription belongs to. */
-  const resolveUser = async (sub: { id: string; customer: string | { id: string } | null; metadata?: Record<string, string> | null }, hint?: string | null) => {
-    if (hint) return hint;
-    if (sub.metadata?.user_id) return sub.metadata.user_id;
-    const { data } = await admin.from("subscriptions").select("user_id").or(`stripe_subscription_id.eq.${sub.id},stripe_customer_id.eq.${customerId(sub.customer)}`).limit(1).maybeSingle();
-    return data?.user_id ?? null;
+  /** A foreign-key error (23503 = the learner no longer exists) can never succeed on retry: log and acknowledge. */
+  const unknownLearner = (what: string) => (e: DbError) => {
+    if (e.code !== "23503") return false;
+    console.error(`Stripe webhook: ${what} skipped, unknown learner`, event.id);
+    return true;
   };
 
-  /**
-   * Database failures must NOT be acknowledged: throwing makes the handler below un-reserve the event and answer 500, so Stripe retries.
-   * The one exception is a foreign-key error (23503 = the referenced learner doesn't exist): it can never succeed, so log it and acknowledge.
-   */
-  const orThrow = (what: string, error: { code?: string; message?: string } | null) => {
-    if (!error) return;
-    if (error.code === "23503") {
-      console.error(`Stripe webhook: ${what} skipped, unknown learner`, event.id);
-      return;
-    }
-    throw new Error(`${what} failed: ${error.message ?? error.code ?? "unknown"}`);
-  };
-
-  const upsert = async (row: Record<string, unknown>, eventTimestamp?: number) => {
-    const updatedAt = eventTimestamp && eventTimestamp > 0
-      ? new Date(eventTimestamp * 1000).toISOString()
-      : new Date().toISOString();
-
-    const subId = String(row.stripe_subscription_id || "");
-    const incomingStatus = String(row.status || "");
-
-    // 1. Atomic PostgreSQL function (migration 0011 upsert_subscription_ordered).
-    // Real DB errors fail closed (throw -> 500 -> Stripe retry). Only a missing function
-    // (migration not applied: PGRST202 / 42883) or an RPC that returns no result falls through.
-    const { data: rpcData, error: rpcErr } = await admin.rpc("upsert_subscription_ordered", {
-      p_sub_id: subId,
-      p_user_id: row.user_id,
-      p_customer_id: row.stripe_customer_id,
-      p_status: incomingStatus,
-      p_plan: row.plan ?? "academy_monthly",
-      p_current_period_end: row.current_period_end,
-      p_cancel_at_period_end: Boolean(row.cancel_at_period_end),
-      p_event_created: eventTimestamp ?? null,
-      p_updated_at: updatedAt,
-    });
-    if (rpcErr && rpcErr.code !== "PGRST202" && rpcErr.code !== "42883") {
-      orThrow("atomic subscription upsert", rpcErr);
-      return;
-    }
-    if (!rpcErr && rpcData && typeof rpcData === "object" && "updated" in rpcData) {
-      if (!(rpcData as { updated: boolean }).updated) {
-        console.warn("Stripe webhook: ignored out-of-order stale subscription write via atomic SQL function", subId);
-      }
-      return;
-    }
-
-    // 2. Direct conditional database upsert fallback
-    if (subId && eventTimestamp) {
-      const isStale = await isEventStaleInDatabase(admin, subId, eventTimestamp, incomingStatus);
-      if (isStale) {
-        console.warn("Stripe webhook: ignored out-of-order stale subscription write", subId);
-        return;
-      }
-    }
-
-    const { error } = await admin.from("subscriptions").upsert(
+  /** The ONLY writer of the membership mirror. */
+  const mirror = async (userId: string, sub: FoundersSubscriptionLike & { current_period_end?: number | null }, status: string) => {
+    if (!event.created || event.created <= 0) throw new Error("event has no valid timestamp");
+    const result = await rpc<{ updated?: unknown; reason?: string }>(
+      "upsert_subscription_ordered",
       {
-        ...row,
-        ...(eventTimestamp ? { last_event_created: eventTimestamp } : {}),
-        updated_at: updatedAt,
+        p_sub_id: sub.id,
+        p_user_id: userId,
+        p_customer_id: customerId(sub.customer),
+        p_status: status,
+        p_plan: "monthly",
+        p_current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+        p_cancel_at_period_end: Boolean(sub.cancel_at_period_end),
+        p_event_created: event.created,
       },
-      { onConflict: "stripe_subscription_id" }
+      "membership save",
+      unknownLearner("membership save"),
     );
-    orThrow("membership save", error);
+    if (result === null) return; // tolerated unknown learner
+    if (typeof result !== "object" || typeof result.updated !== "boolean") {
+      throw new Error("membership save failed: invalid result from upsert_subscription_ordered");
+    }
+    if (!result.updated) {
+      if (result.reason === "binding_mismatch") throw new Error("membership save failed: subscription is bound to a different account");
+      console.warn("Stripe webhook: ignored out-of-order subscription state", sub.id);
+    }
   };
 
   /** One-time credit pack paid → wallet credit, once per Checkout Session (grant_credits is idempotent on the session id). */
   const fulfillPack = async (s: Stripe.Checkout.Session) => {
-    if (s.mode !== "payment" || !s.client_reference_id || s.payment_status !== "paid") return false;
+    if (s.mode !== "payment" || !s.client_reference_id || s.payment_status !== "paid") return;
     const link = typeof s.payment_link === "string" ? s.payment_link : s.payment_link?.id;
     const pack = packByPaymentLink(link) ?? CREDIT_PACKS.find((p) => p.kind === s.metadata?.credit_kind && String(p.qty) === s.metadata?.credit_qty);
-    if (!pack) return true; // a payment that isn't one of our packs
-    const { error } = await admin.rpc("grant_credits", { p_user: s.client_reference_id, p_kind: pack.kind, p_qty: pack.qty, p_reason: "purchase", p_ref: s.id });
-    orThrow("credit grant", error);
-    return true;
+    if (!pack) return; // a payment that isn't one of our packs
+    await rpc("grant_credits", { p_user: s.client_reference_id, p_kind: pack.kind, p_qty: pack.qty, p_reason: "purchase", p_ref: s.id }, "credit grant", unknownLearner("credit grant"));
   };
 
-  let activeSubId: string | null = null;
+  const fulfillSubscription = async (s: Stripe.Checkout.Session) => {
+    if (s.mode !== "subscription" || !s.subscription) return;
+
+    // Payment links never grant subscriptions: their client_reference_id is caller-controlled.
+    const link = typeof s.payment_link === "string" ? s.payment_link : s.payment_link?.id;
+    if (link) return;
+
+    // Brand & product check (guard against cross-tenant subscription leakage on a shared Stripe account).
+    if (s.metadata?.business && s.metadata.business !== "rreal") return;
+    if (s.metadata?.app && s.metadata.app !== "rreal-ai-academy") return;
+    if (s.metadata?.product && !s.metadata.product.includes("rreal") && !s.metadata.product.includes("academy")) return;
+    if (!isSandbox && (s.metadata?.environment === "sandbox" || s.metadata?.sandbox === "true")) {
+      console.warn("Stripe webhook: rejected sandbox checkout in production webhook");
+      return;
+    }
+
+    const userId = s.client_reference_id;
+    if (!userId || !UUID_RE.test(userId)) return;
+
+    const stripe = getStripe();
+    if (!stripe) {
+      // Without an API client the subscription cannot be verified, so nothing is granted.
+      console.warn("Stripe webhook: skipped unverified subscription checkout without API client");
+      return;
+    }
+
+    const subId = typeof s.subscription === "string" ? s.subscription : s.subscription.id;
+    const sub = (await stripe.subscriptions.retrieve(subId)) as unknown as FoundersSubscriptionLike & { current_period_end?: number | null };
+    const allowed = getAllowedPriceIds();
+    if (!sub.items?.data?.some((item) => item.price?.id && allowed.has(item.price.id))) {
+      console.warn("Stripe webhook: rejected subscription checkout outside price allow-list", subId);
+      return;
+    }
+
+    // Bind this subscription to the account that opened the session (recorded by our authenticated checkout route).
+    const binding = await rpc<{ bound?: boolean; kind?: string; price_id?: string; reason?: string }>(
+      "bind_checkout_subscription",
+      { p_session_id: s.id, p_user_id: userId, p_sub_id: sub.id, p_customer_id: customerId(sub.customer), p_livemode: event.livemode },
+      "checkout binding",
+    );
+    if (!binding || typeof binding.bound !== "boolean") throw new Error("checkout binding failed: invalid result");
+
+    if (isFoundersPriced(sub)) {
+      // Founders: the session MUST be one we created for this account as a Founders checkout.
+      if (!binding.bound || binding.kind !== "founders" || binding.price_id !== configuredFoundersPriceId()) {
+        console.warn("Stripe webhook: Founders checkout without a matching server-side binding; nothing granted", subId);
+        return;
+      }
+      const applied = await applyFoundersSubscription({
+        eventId: event.id, eventType: "customer.subscription.updated", eventCreated: event.created,
+        livemode: event.livemode, accountId: userId, sub,
+      });
+      if (!applied.mirror) {
+        console.warn("Stripe webhook: Founders checkout not enrolled; nothing granted", subId, applied.outcome);
+        return;
+      }
+    } else if (binding.bound ? binding.kind !== "legacy_monthly" : binding.reason !== "unknown_session") {
+      // A recorded session that doesn't match (other account / mode / plan) grants nothing.
+      // A session we never recorded (created before bindings existed) keeps the prior behaviour for the standard plan.
+      console.warn("Stripe webhook: checkout binding mismatch; nothing granted", subId);
+      return;
+    }
+
+    if (!MIRRORED.has(sub.status)) return;
+    await mirror(userId, sub, sub.status);
+  };
+
+  const handleSubscriptionEvent = async (type: "customer.subscription.created" | "customer.subscription.updated" | "customer.subscription.deleted", sub: Stripe.Subscription) => {
+    if (sub.metadata?.business && sub.metadata.business !== "rreal") return;
+    if (sub.metadata?.app && sub.metadata.app !== "rreal-ai-academy") return;
+    if (!isSandbox && (sub.metadata?.environment === "sandbox" || sub.metadata?.sandbox === "true")) {
+      console.warn("Stripe webhook: rejected sandbox subscription in production webhook");
+      return;
+    }
+
+    const view = sub as unknown as FoundersSubscriptionLike & { current_period_end?: number | null };
+    const allowed = getAllowedPriceIds();
+    const items = view.items?.data ?? [];
+    if (items.length > 0 && !items.some((item) => item.price?.id && allowed.has(item.price.id))) {
+      console.warn("Stripe webhook: rejected subscription outside price allow-list", sub.id);
+      return;
+    }
+
+    const account = await rpc<AccountResolution>("resolve_subscription_account", { p_sub_id: sub.id }, "account resolution");
+    if (!account) {
+      // Not (yet) one of ours: no server-side binding exists. checkout.session.completed binds and catches up.
+      console.warn("Stripe webhook: subscription has no server-side account binding; ignored", sub.id);
+      return;
+    }
+    if (typeof account.user_id !== "string" || !UUID_RE.test(account.user_id)) throw new Error("account resolution failed: invalid result");
+
+    if (isFoundersPriced(view)) {
+      if (account.source !== "checkout_binding" || account.kind !== "founders" || account.livemode !== event.livemode
+        || account.price_id !== configuredFoundersPriceId()) {
+        console.warn("Stripe webhook: Founders-priced subscription without a Founders binding; nothing granted", sub.id);
+        return;
+      }
+      const applied = await applyFoundersSubscription({
+        eventId: event.id, eventType: type, eventCreated: event.created, livemode: event.livemode,
+        accountId: account.user_id, sub: view,
+      });
+      if (!applied.mirror) {
+        console.warn("Stripe webhook: Founders event produced no enrollment for this subscription", sub.id, applied.outcome);
+        return;
+      }
+    } else if (account.kind === "founders") {
+      // A Founders-bound subscription that is no longer on the Founders price is not a state we grant from.
+      console.warn("Stripe webhook: Founders-bound subscription on a different price; ignored", sub.id);
+      return;
+    }
+
+    if (!MIRRORED.has(sub.status)) return;
+    await mirror(account.user_id, view, sub.status);
+  };
 
   try {
-    // Helper: fulfills subscription checkout for both completed and async_payment_succeeded
-    const fulfillSubscription = async (s: Stripe.Checkout.Session) => {
-      if (s.mode !== "subscription" || !s.subscription) return;
-
-      // F8b [E5/E11]: Payment links never grant subscriptions
-      const link = typeof s.payment_link === "string" ? s.payment_link : s.payment_link?.id;
-      if (link) return;
-
-      // Brand & Product Check (R-3 guard against cross-tenant subscription leakage):
-      if (s.metadata?.business && s.metadata.business !== "rreal") return;
-      if (s.metadata?.app && s.metadata.app !== "rreal-ai-academy") return;
-      if (s.metadata?.product && !s.metadata.product.includes("rreal") && !s.metadata.product.includes("academy")) return;
-
-      // Reject sandbox checkout in production webhook
-      if (!isSandbox && (s.metadata?.environment === "sandbox" || s.metadata?.sandbox === "true")) {
-        console.warn("Stripe webhook: rejected sandbox checkout in production webhook");
-        return;
-      }
-
-      // F7 [E5/E6]: Use client_reference_id directly. Never fall back to email as an identity key.
-      const userId = s.client_reference_id;
-      if (!userId) return;
-
-      const subId = typeof s.subscription === "string" ? s.subscription : s.subscription.id;
-      activeSubId = subId;
-
-      const stripe = getStripe();
-      if (stripe) {
-        // F1 [E9/E3]: Out-of-order delivery defense
-        if (await isEventStaleInDatabase(admin, subId, event.created ?? 0, "active")) {
-          console.warn("Stripe webhook: ignored out-of-order stale checkout session", subId);
-          return;
-        }
-
-        const sub = await stripe.subscriptions.retrieve(subId);
-        const hasAllowedItem = sub.items?.data?.some(
-          (item) => item.price?.id && getAllowedPriceIds().has(item.price.id),
-        );
-        if (!hasAllowedItem) {
-          console.warn("Stripe webhook: rejected subscription checkout outside price allow-list", subId);
-          return;
-        }
-
-        await upsert({
-          user_id: userId,
-          stripe_customer_id: customerId(sub.customer),
-          stripe_subscription_id: sub.id,
-          status: sub.status,
-          plan: "monthly",
-          current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
-          cancel_at_period_end: sub.cancel_at_period_end,
-        }, event.created);
-      } else if (secretKey && isSandbox) {
-        // In sandbox or test environments with verified API key configured
-        await upsert({
-          user_id: userId,
-          stripe_customer_id: customerId(s.customer),
-          stripe_subscription_id: subId,
-          status: s.payment_status === "paid" ? "active" : "incomplete",
-          plan: "monthly",
-        }, event.created);
-      } else {
-        // F8 [E5/E11]: Without API key, public checkout must not grant subscription
-        console.warn("Stripe webhook: skipped unverified subscription checkout without API client", subId);
-        return;
-      }
-    };
-
     switch (event.type) {
       case "checkout.session.completed":
       case "checkout.session.async_payment_succeeded": {
         const s = event.data.object as Stripe.Checkout.Session;
-        if (s.mode === "payment") {
-          await fulfillPack(s);
-        } else if (s.mode === "subscription") {
-          await fulfillSubscription(s);
-        }
+        if (s.mode === "payment") await fulfillPack(s);
+        else if (s.mode === "subscription") await fulfillSubscription(s);
         break;
       }
       case "customer.subscription.created":
       case "customer.subscription.updated":
-      case "customer.subscription.deleted": {
-        const sub = event.data.object as Stripe.Subscription;
-        if (sub.metadata?.business && sub.metadata.business !== "rreal") break;
-        if (sub.metadata?.app && sub.metadata.app !== "rreal-ai-academy") break;
-
-        // Reject sandbox subscription in production webhook
-        if (!isSandbox && (sub.metadata?.environment === "sandbox" || sub.metadata?.sandbox === "true")) {
-          console.warn("Stripe webhook: rejected sandbox subscription in production webhook");
-          break;
-        }
-
-        // F6 [E8/E9]: Price allow-list check
-        const hasAllowedPrice = sub.items?.data?.some(
-          (item) => item.price?.id && getAllowedPriceIds().has(item.price.id),
-        );
-        if (sub.items?.data && sub.items.data.length > 0 && !hasAllowedPrice) {
-          console.warn("Stripe webhook: rejected subscription outside price allow-list", sub.id);
-          break;
-        }
-
-        activeSubId = sub.id;
-
-        // F1 [E9/E3]: Out-of-order event defense: do not overwrite newer state with older created event
-        if (await isEventStaleInDatabase(admin, sub.id, event.created ?? 0, sub.status)) {
-          console.warn("Stripe webhook: ignored out-of-order stale subscription event", sub.id);
-          break;
-        }
-
-        const userId = await resolveUser(sub as never);
-        if (!userId || !ACTIVE.has(sub.status)) break;
-
-        await upsert({
-          user_id: userId,
-          stripe_customer_id: customerId(sub.customer),
-          stripe_subscription_id: sub.id,
-          status: sub.status,
-          plan: "monthly",
-          current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
-          cancel_at_period_end: sub.cancel_at_period_end,
-        }, event.created);
+      case "customer.subscription.deleted":
+        await handleSubscriptionEvent(event.type, event.data.object as Stripe.Subscription);
         break;
-      }
-    }
-        // Wire Founders rules engine for managed Founders subscriptions
-    const foundersPrices = [
-      process.env.STRIPE_FOUNDERS_PRICE_ID,
-      process.env.NEXT_PUBLIC_STRIPE_FOUNDERS_PRICE_ID,
-    ].filter(Boolean);
-
-    const eventSub = (event.data?.object as any);
-    const eventPriceId = eventSub?.items?.data?.[0]?.price?.id;
-    if (foundersPrices.length > 0 && eventPriceId && foundersPrices.includes(eventPriceId)) {
-      try {
-        const engine = getDefaultFoundersRulesEngine();
-        await engine.processSubscriptionWebhook("rreal", event as any);
-      } catch (engineErr) {
-        console.warn("Founders rules engine webhook processing warning:", engineErr);
-      }
     }
 
     await processReferralPaymentEvent(event, admin, getStripe());
-  } catch (e) {
 
-    await admin.from("webhook_events").delete().eq("id", event.id);
+    // 3. Only now is the event complete.
+    const done = await rpc<boolean>("complete_webhook_event", { p_id: event.id }, "event completion");
+    if (done !== true) throw new Error("event completion failed: invalid result");
+  } catch (e) {
     console.error("Stripe webhook failed", e);
+    // Best effort note for operators; the event stays 'processing' so the provider retry re-runs it.
+    try {
+      await admin.rpc("fail_webhook_event", { p_id: event.id, p_error: e instanceof Error ? e.message : "unknown" });
+    } catch { /* the 500 below is the signal */ }
     return NextResponse.json({ error: "Handler failed" }, { status: 500 });
   }
   return NextResponse.json({ received: true });

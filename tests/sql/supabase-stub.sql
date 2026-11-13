@@ -24,3 +24,6 @@ create or replace function auth.jwt() returns jsonb language sql stable as $$
 $$;
 grant usage on schema auth to anon, authenticated, service_role;
 grant usage on schema public to anon, authenticated, service_role;
+-- Supabase's default privileges: API roles get table/sequence access and Row Level Security does the gatekeeping.
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
