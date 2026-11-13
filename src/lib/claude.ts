@@ -11,15 +11,20 @@ import {
 let defaultManager: CostMeteringManager | null = null;
 
 function createDefaultStore() {
-  const dbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+  const dbUrl = process.env.DATABASE_URL || process.env.TEST_DATABASE_URL;
   if (dbUrl) {
     try {
       const { Pool } = require("pg");
       const { PostgresFoundersCostStore } = require("./founders");
       return new PostgresFoundersCostStore(new Pool({ connectionString: dbUrl }));
-    } catch {
-      // Fallback to memory
+    } catch (err) {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error("Failed to initialize durable PostgresFoundersCostStore in production: " + (err as Error).message);
+      }
     }
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Durable PostgresFoundersCostStore requires DATABASE_URL in production. In-memory fallback is prohibited.");
   }
   const { MemoryFoundersCostStore } = require("./founders");
   return new MemoryFoundersCostStore();
@@ -162,8 +167,8 @@ async function callOpenAIWithDetails(
  * and that provider timeouts strictly retain reservations to prevent double-spending in-flight compute.
  */
 export async function callClaude(opts: ClaudeCallOptions): Promise<string | null> {
-  if (process.env.ENFORCE_FOUNDERS_METERING === "true" && !opts.metering && !opts.byok) {
-    throw new Error("Founders Beta requires metered account context for managed provider execution.");
+  if (!opts.metering && !opts.byok) {
+    throw new Error("callClaude requires mandatory metering context for all managed provider calls");
   }
 
   if (opts.metering) {

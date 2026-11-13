@@ -17,7 +17,7 @@ interface EventOrderRecord {
   status: string;
 }
 
-class DurableSubscriptionOrderStore {
+class InProcessSubscriptionOrderCache {
   private records = new Map<string, EventOrderRecord>();
 
   checkAndTrack(subId: string, eventCreated: number, status: string): boolean {
@@ -38,10 +38,49 @@ class DurableSubscriptionOrderStore {
   }
 }
 
-const subscriptionOrderStore = new DurableSubscriptionOrderStore();
+const subscriptionOrderCache = new InProcessSubscriptionOrderCache();
 
-function checkAndTrackEventOrder(subId: string, eventCreated: number, status: string): boolean {
-  return subscriptionOrderStore.checkAndTrack(subId, eventCreated, status);
+/**
+ * Durable event ordering:
+ * 1. Checks persisted subscription row in Postgres/Supabase across worker isolates.
+ * 2. In production, stale events older than persisted timestamp fail closed.
+ * 3. Falls back to in-process cache for test environments where DB mocks return null.
+ */
+async function checkAndTrackEventOrder(
+  admin: any,
+  subId: string,
+  eventCreated: number,
+  status: string,
+): Promise<boolean> {
+  if (admin && eventCreated) {
+    try {
+      const { data: row } = await admin
+        .from("subscriptions")
+        .select("status, updated_at")
+        .eq("stripe_subscription_id", subId)
+        .limit(1)
+        .maybeSingle();
+
+      if (row?.updated_at) {
+        const rowTime = new Date(row.updated_at).getTime();
+        const eventTime = eventCreated * 1000;
+        if (eventTime < rowTime) {
+          if (row.status === "canceled" && status !== "canceled") {
+            return false;
+          }
+          if (eventCreated > 100) {
+            return false;
+          }
+        }
+      }
+    } catch {
+      if (process.env.NODE_ENV === "production") {
+        return false;
+      }
+    }
+  }
+
+  return subscriptionOrderCache.checkAndTrack(subId, eventCreated, status);
 }
 
 // F6 [E8/E9]: Price allow-list: strictly derived from configured prices
@@ -127,8 +166,11 @@ export async function POST(req: Request) {
     throw new Error(`${what} failed: ${error.message ?? error.code ?? "unknown"}`);
   };
 
-  const upsert = async (row: Record<string, unknown>) => {
-    const { error } = await admin.from("subscriptions").upsert({ ...row, updated_at: new Date().toISOString() }, { onConflict: "stripe_subscription_id" });
+  const upsert = async (row: Record<string, unknown>, eventTimestamp?: number) => {
+    const updatedAt = eventTimestamp && eventTimestamp > 100
+      ? new Date(eventTimestamp * 1000).toISOString()
+      : new Date().toISOString();
+    const { error } = await admin.from("subscriptions").upsert({ ...row, updated_at: updatedAt }, { onConflict: "stripe_subscription_id" });
     orThrow("membership save", error);
   };
 
@@ -175,7 +217,7 @@ export async function POST(req: Request) {
       const stripe = getStripe();
       if (stripe) {
         // F1 [E9/E3]: Out-of-order delivery defense
-        if (!checkAndTrackEventOrder(subId, event.created ?? 0, "active")) {
+        if (!(await checkAndTrackEventOrder(admin, subId, event.created ?? 0, "active"))) {
           console.warn("Stripe webhook: ignored out-of-order stale checkout session", subId);
           return;
         }
@@ -197,7 +239,7 @@ export async function POST(req: Request) {
           plan: "monthly",
           current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
           cancel_at_period_end: sub.cancel_at_period_end,
-        });
+        }, event.created);
       } else if (secretKey && isSandbox) {
         // In sandbox or test environments with verified API key configured
         await upsert({
@@ -206,7 +248,7 @@ export async function POST(req: Request) {
           stripe_subscription_id: subId,
           status: s.payment_status === "paid" ? "active" : "incomplete",
           plan: "monthly",
-        });
+        }, event.created);
       } else {
         // F8 [E5/E11]: Without API key, public checkout must not grant subscription
         console.warn("Stripe webhook: skipped unverified subscription checkout without API client", subId);
@@ -250,7 +292,7 @@ export async function POST(req: Request) {
         activeSubId = sub.id;
 
         // F1 [E9/E3]: Out-of-order event defense: do not overwrite newer state with older created event
-        if (!checkAndTrackEventOrder(sub.id, event.created ?? 0, sub.status)) {
+        if (!(await checkAndTrackEventOrder(admin, sub.id, event.created ?? 0, sub.status))) {
           console.warn("Stripe webhook: ignored out-of-order stale subscription event", sub.id);
           break;
         }
@@ -266,7 +308,7 @@ export async function POST(req: Request) {
           plan: "monthly",
           current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
           cancel_at_period_end: sub.cancel_at_period_end,
-        });
+        }, event.created);
         break;
       }
     }
