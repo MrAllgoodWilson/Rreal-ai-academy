@@ -24,6 +24,7 @@ export async function POST(req: Request) {
     messages: [{ role: "user", content: `I want to create: """${parsed.data.request}"""\nWrite it in ${parsed.data.language === "es" ? "Latin American Spanish" : "English"}.` }],
     maxTokens: 4000,
     byok,
+    metering: { accountId: (who as any).member?.user?.id || (who as any).user?.id || "member", companyId: "rreal" },
   }).catch(() => null);
   if (!raw) return NextResponse.json({ error: "Couldn't build that playbook right now. Try again." }, { status: 502 });
   try {

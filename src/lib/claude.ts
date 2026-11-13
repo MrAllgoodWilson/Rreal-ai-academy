@@ -10,22 +10,24 @@ import {
 
 let defaultManager: CostMeteringManager | null = null;
 
+function createDefaultStore() {
+  const dbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+  if (dbUrl) {
+    try {
+      const { Pool } = require("pg");
+      const { PostgresFoundersCostStore } = require("./founders");
+      return new PostgresFoundersCostStore(new Pool({ connectionString: dbUrl }));
+    } catch {
+      // Fallback to memory
+    }
+  }
+  const { MemoryFoundersCostStore } = require("./founders");
+  return new MemoryFoundersCostStore();
+}
+
 export function getDefaultCostMeteringManager(): CostMeteringManager {
   if (!defaultManager) {
-    const dbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
-    if (dbUrl) {
-      try {
-        // Dynamic load for durable database-backed cost store when connection available
-        const { Pool } = require("pg");
-        const pool = new Pool({ connectionString: dbUrl });
-        const { PostgresFoundersCostStore } = require("./founders");
-        defaultManager = new CostMeteringManager(new PostgresFoundersCostStore(pool));
-      } catch {
-        defaultManager = new CostMeteringManager(new MemoryFoundersCostStore());
-      }
-    } else {
-      defaultManager = new CostMeteringManager(new MemoryFoundersCostStore());
-    }
+    defaultManager = new CostMeteringManager(createDefaultStore());
   }
   return defaultManager;
 }
@@ -195,5 +197,5 @@ export async function callClaude(opts: ClaudeCallOptions): Promise<string | null
     );
   }
 
-  return await executeProviderCall(opts);
+  throw new Error("callClaude requires mandatory metering context for all provider calls");
 }

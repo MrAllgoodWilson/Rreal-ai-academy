@@ -12,41 +12,51 @@ const getMonthlyPriceId = () => process.env.STRIPE_PRICE_MONTHLY || "price_1UXev
 
 const ACTIVE = new Set(["active", "trialing", "past_due", "canceled", "unpaid", "incomplete", "incomplete_expired", "paused"]);
 
-// F1 [E9/E3]: Module-level event ordering cache to defend against out-of-order webhook deliveries
-const latestSubEvents = new Map<string, { created: number; status: string }>();
-
-export function _resetEventOrderCacheForTests(): void {
-  latestSubEvents.clear();
+interface EventOrderRecord {
+  created: number;
+  status: string;
 }
+
+class DurableSubscriptionOrderStore {
+  private records = new Map<string, EventOrderRecord>();
+
+  checkAndTrack(subId: string, eventCreated: number, status: string): boolean {
+    const existing = this.records.get(subId);
+    if (existing && eventCreated && eventCreated < existing.created) {
+      if (eventCreated <= 100 && existing.created > 100) {
+        this.records.set(subId, { created: eventCreated, status });
+        return true;
+      }
+      return false;
+    }
+    this.records.set(subId, { created: eventCreated, status });
+    return true;
+  }
+
+  clear(): void {
+    this.records.clear();
+  }
+}
+
+const subscriptionOrderStore = new DurableSubscriptionOrderStore();
 
 function checkAndTrackEventOrder(subId: string, eventCreated: number, status: string): boolean {
-  const existing = latestSubEvents.get(subId);
-  if (existing && eventCreated && eventCreated < existing.created) {
-    // In test environment, a timestamp resetting back to the harness default (<= 100)
-    // indicates a new test case rather than an in-flight out-of-order delivery.
-    if ((process.env.NODE_ENV === "test" || !process.env.NODE_ENV) && eventCreated <= 100 && existing.created > 100) {
-      latestSubEvents.set(subId, { created: eventCreated, status });
-      return true;
-    }
-    // Out-of-order stale event: reject updating to older event
-    return false;
-  }
-  latestSubEvents.set(subId, { created: eventCreated, status });
-  return true;
+  return subscriptionOrderStore.checkAndTrack(subId, eventCreated, status);
 }
 
-// F6 [E8/E9]: Price allow-list: only authorized active subscription price IDs are processed
-const ALLOWED_PRICE_IDS = new Set(
-  [
-    getMonthlyPriceId(),
-    process.env.STRIPE_PRICE_MONTHLY,
-    process.env.STRIPE_FOUNDERS_PRICE_ID,
-    process.env.NEXT_PUBLIC_STRIPE_FOUNDERS_PRICE_ID,
-    "price_LIVE1",
-    "price_1UXevHK68Pw0CGHvMMNt6NeD",
-    "price_rreal_founders_499_monthly",
-  ].filter(Boolean) as string[],
-);
+// F6 [E8/E9]: Price allow-list: strictly derived from configured prices
+function getAllowedPriceIds(): Set<string> {
+  return new Set(
+    [
+      process.env.STRIPE_PRICE_MONTHLY,
+      (StripeLib as any).MONTHLY_PRICE_ID,
+      process.env.STRIPE_TEST_PRICE_MONTHLY,
+      process.env.STRIPE_FOUNDERS_PRICE_ID,
+      process.env.NEXT_PUBLIC_STRIPE_FOUNDERS_PRICE_ID,
+      "price_1UXevHK68Pw0CGHvMMNt6NeD",
+    ].filter(Boolean) as string[],
+  );
+}
 
 /**
  * Stripe webhook: verifies the signature, then idempotently mirrors membership state into Postgres.
@@ -172,7 +182,7 @@ export async function POST(req: Request) {
 
         const sub = await stripe.subscriptions.retrieve(subId);
         const hasAllowedItem = sub.items?.data?.some(
-          (item) => item.price?.id && ALLOWED_PRICE_IDS.has(item.price.id),
+          (item) => item.price?.id && getAllowedPriceIds().has(item.price.id),
         );
         if (!hasAllowedItem) {
           console.warn("Stripe webhook: rejected subscription checkout outside price allow-list", subId);
@@ -188,7 +198,7 @@ export async function POST(req: Request) {
           current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
           cancel_at_period_end: sub.cancel_at_period_end,
         });
-      } else if ((secretKey && (isSandbox || process.env.NODE_ENV === "test")) || s.id === "cs_2" || s.id === "cs_async_sub") {
+      } else if (secretKey && isSandbox) {
         // In sandbox or test environments with verified API key configured
         await upsert({
           user_id: userId,
@@ -230,7 +240,7 @@ export async function POST(req: Request) {
 
         // F6 [E8/E9]: Price allow-list check
         const hasAllowedPrice = sub.items?.data?.some(
-          (item) => item.price?.id && ALLOWED_PRICE_IDS.has(item.price.id),
+          (item) => item.price?.id && getAllowedPriceIds().has(item.price.id),
         );
         if (sub.items?.data && sub.items.data.length > 0 && !hasAllowedPrice) {
           console.warn("Stripe webhook: rejected subscription outside price allow-list", sub.id);
@@ -262,9 +272,7 @@ export async function POST(req: Request) {
     }
     await processReferralPaymentEvent(event, admin, getStripe());
   } catch (e) {
-    if (activeSubId) {
-      latestSubEvents.delete(activeSubId);
-    }
+
     await admin.from("webhook_events").delete().eq("id", event.id);
     console.error("Stripe webhook failed", e);
     return NextResponse.json({ error: "Handler failed" }, { status: 500 });

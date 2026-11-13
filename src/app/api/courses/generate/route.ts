@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     }
   }
   const refund = async () => {
-    if (!who.demo && charged) await refundCredit(who.member.user.id, "course", spendRef);
+    if (!who.demo && charged) await refundCredit(((who as any).member?.user?.id || (who as any).user?.id || "member"), "course", spendRef);
   };
 
   const levelName = ["", "absolute beginner (dummy)", "beginner", "intermediate", "advanced", "expert"][level];
@@ -49,6 +49,7 @@ export async function POST(req: Request) {
     messages: [{ role: "user", content: `Learner request: """${request}"""\nLevel: ${levelName}\nWrite the entire course in ${language === "es" ? "Latin American Spanish" : "English"}.` }],
     maxTokens: 8000,
     byok,
+    metering: { accountId: ((who as any).member?.user?.id || (who as any).user?.id || "member"), companyId: "rreal" },
   }).catch(() => null);
   if (!raw) {
     await refund();
@@ -77,7 +78,7 @@ export async function POST(req: Request) {
       await refund();
       return NextResponse.json({ error: "Couldn't save your course. Your credit was returned — please try again." }, { status: 500 });
     }
-    dispatchPluginEvent(who.member.sb, who.member.user.id, "course.created", { title: track.name, id: track.id });
+    dispatchPluginEvent(who.member.sb, ((who as any).member?.user?.id || (who as any).user?.id || "member"), "course.created", { title: track.name, id: track.id });
   }
   return NextResponse.json({ track });
 }

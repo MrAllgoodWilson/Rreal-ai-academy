@@ -4,10 +4,9 @@ import { resolveCheckoutPrice } from "@/lib/stripe-sandbox-guard";
 import { getSupabaseServer } from "@/lib/supabase/server";
 
 /**
- * Starts the $1/month membership checkout.
- * - With STRIPE_SECRET_KEY: creates a Checkout Session (best experience).
- * - Otherwise: falls back to the Stripe Payment Link (NEXT_PUBLIC_STRIPE_PAYMENT_LINK) tagged with the user id.
- * - Demo mode (no Supabase): 501 → the client activates a local demo membership.
+ * Starts the membership checkout session.
+ * - With STRIPE_SECRET_KEY: creates an authenticated Checkout Session.
+ * - Without STRIPE_SECRET_KEY: fails closed (503) to prevent ungranted payments.
  */
 export async function POST(req: Request) {
   const checkout = resolveCheckoutPrice(process.env);
@@ -19,7 +18,7 @@ export async function POST(req: Request) {
   const { data: auth } = await sb.auth.getUser();
   if (!auth.user) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
 
-  // F5 [E4/E7]: Double billing defense — a member with an active subscription cannot start a second checkout
+  // F5 [E4/E7] & Probe D: Double billing defense & forfeiture enforcement
   const existing = (
     await sb
       .from("subscriptions")
@@ -30,9 +29,10 @@ export async function POST(req: Request) {
       .maybeSingle()
   ).data;
 
-  if (existing?.status === "active" || existing?.status === "trialing") {
+  const NON_CHECKOUT_STATUSES = new Set(["active", "trialing", "canceled", "past_due", "paused", "unpaid"]);
+  if (existing?.status && NON_CHECKOUT_STATUSES.has(existing.status)) {
     return NextResponse.json(
-      { error: "Account already has an active subscription. Cannot start a second checkout." },
+      { error: "Account already has an active or forfeited subscription. Cannot start a second checkout." },
       { status: 400 },
     );
   }
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   if (stripe) {
     const clientId = auth.user.id;
 
-    // In sandbox, customer IDs are separate from live Stripe customer IDs (R1 probe)
+    // In sandbox, customer IDs are separate from live Stripe customer IDs
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: checkout.priceId, quantity: 1 }],
@@ -68,14 +68,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ url: session.url });
   }
 
-  // Sandbox must never redirect visitors to the existing live Payment Link.
-  if (checkout.sandbox) return NextResponse.json({ error: "Stripe test checkout requires a configured test API client." }, { status: 503 });
-  const link = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK;
-  if (link) {
-    const u = new URL(link);
-    u.searchParams.set("client_reference_id", auth.user.id);
-    if (auth.user.email) u.searchParams.set("prefilled_email", auth.user.email);
-    return NextResponse.json({ url: u.toString() });
-  }
+  // Probe C: Fail closed without Stripe API client to prevent charging customers without entitlement
   return NextResponse.json({ error: "Payments aren't configured yet." }, { status: 503 });
 }
