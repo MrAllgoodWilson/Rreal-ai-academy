@@ -19,19 +19,36 @@ export async function POST(req: Request) {
   const { data: auth } = await sb.auth.getUser();
   if (!auth.user) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
 
+  // F5 [E4/E7]: Double billing defense — a member with an active subscription cannot start a second checkout
+  const existing = (
+    await sb
+      .from("subscriptions")
+      .select("stripe_customer_id, status")
+      .eq("user_id", auth.user.id)
+      .not("stripe_customer_id", "is", null)
+      .limit(1)
+      .maybeSingle()
+  ).data;
+
+  if (existing?.status === "active" || existing?.status === "trialing") {
+    return NextResponse.json(
+      { error: "Account already has an active subscription. Cannot start a second checkout." },
+      { status: 400 },
+    );
+  }
+
   const site = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin;
   const stripe = getStripe();
   if (stripe) {
-    // Sandbox customer IDs are separate from live Stripe customer IDs.
-    const existing = checkout.sandbox ? null : (await sb.from("subscriptions").select("stripe_customer_id").eq("user_id", auth.user.id).not("stripe_customer_id", "is", null).limit(1).maybeSingle()).data;
     const clientId = auth.user.id;
 
+    // In sandbox, customer IDs are separate from live Stripe customer IDs (R1 probe)
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: checkout.priceId, quantity: 1 }],
       client_reference_id: clientId,
-      customer: existing?.stripe_customer_id ?? undefined,
-      customer_email: existing?.stripe_customer_id ? undefined : auth.user.email,
+      customer: checkout.sandbox ? undefined : (existing?.stripe_customer_id ?? undefined),
+      customer_email: (checkout.sandbox ? false : existing?.stripe_customer_id) ? undefined : auth.user.email,
       subscription_data: {
         metadata: {
           user_id: clientId,

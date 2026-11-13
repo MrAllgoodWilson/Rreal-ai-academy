@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = { rpcError: null as null | { code?: string; message?: string }, upsertError: null as null | { code?: string; message?: string }, deleted: [] as string[], rpcCalls: [] as unknown[] };
 let event: unknown;
 
-vi.mock("@/lib/stripe", () => ({ getStripe: () => null, verifyWebhook: async () => event }));
+vi.mock("@/lib/stripe", () => ({
+  getStripe: () => null,
+  verifyWebhook: async () => event,
+  MONTHLY_PRICE_ID: "price_1UXevHK68Pw0CGHvMMNt6NeD",
+}));
+
 vi.mock("@/lib/supabase/server", () => ({
   getSupabaseAdmin: () => ({
     from: (table: string) => ({

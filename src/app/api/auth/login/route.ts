@@ -9,15 +9,36 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
  */
 export async function POST(req: Request) {
   const ip = clientIp(req);
-  if (!rateLimit(`login:${ip}`, 10, 5 * 60_000).ok) return NextResponse.json({ error: "Too many attempts. Wait a few minutes and try again." }, { status: 429 });
-  const parsed = z.object({ identifier: z.string().min(1).max(254), password: z.string().min(1).max(200) }).safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Enter your username/email and password." }, { status: 400 });
+  if (!rateLimit(`login:ip:${ip}`, 10, 5 * 60_000).ok) {
+    return NextResponse.json({ error: "Too many attempts. Wait a few minutes and try again." }, { status: 429 });
+  }
+
+  const body = await req.json().catch(() => null);
+  const parsed = z
+    .object({
+      identifier: z.string().min(1).max(254),
+      password: z.string().min(1).max(200),
+    })
+    .safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Enter your username/email and password." }, { status: 400 });
+  }
+
+  // Rate limit by normalized account identifier to defend against rotating IP brute-force attacks (F13)
+  const normalizedId = parsed.data.identifier.trim().toLowerCase();
+  if (!rateLimit(`login:account:${normalizedId}`, 10, 5 * 60_000).ok) {
+    return NextResponse.json(
+      { error: "Too many login attempts against this account. Wait a few minutes and try again." },
+      { status: 429 },
+    );
+  }
 
   const sb = await getSupabaseServer();
   if (!sb) return NextResponse.json({ error: "Auth backend not configured." }, { status: 501 });
   const generic = NextResponse.json({ error: "That username/email and password don't match." }, { status: 401 });
 
-  let email = parsed.data.identifier.trim().toLowerCase();
+  let email = normalizedId;
   if (!email.includes("@")) {
     const admin = getSupabaseAdmin();
     if (!admin) return generic;
