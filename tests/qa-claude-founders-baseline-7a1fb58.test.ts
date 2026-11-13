@@ -16,7 +16,7 @@ vi.mock("@/lib/supabase/server", () => ({
       insert: async (r: any) => { if (t === "webhook_events") { if (store.events.has(r.id)) return { error: { code: "23505" } }; store.events.add(r.id); } return { error: null }; },
       upsert: async (r: any) => { if (store.failUpsert > 0) { store.failUpsert--; return { error: { code: "XX000", message: "db down" } }; } if (t === "subscriptions") store.subs.set(r.stripe_subscription_id, { ...r }); return { error: null }; },
       delete: () => ({ eq: async (_c: string, id: string) => { store.events.delete(id); return {}; } }),
-      select: () => ({ eq: (_c: string, v: string) => ({ limit: () => ({ maybeSingle: async () => ({ data: t === "users" && store.users.has(v) ? { id: store.users.get(v) } : null }) }) }), or: () => ({ limit: () => ({ maybeSingle: async () => ({ data: null }) }) }) }),
+      select: () => ({ eq: (_c: string, v: string) => ({ limit: () => ({ maybeSingle: async () => ({ data: t === "users" && store.users.has(v) ? { id: store.users.get(v) } : (t === "subscriptions" && store.subs.has(v) ? store.subs.get(v) : null) }) }) }), or: () => ({ limit: () => ({ maybeSingle: async () => ({ data: null }) }) }) }),
     }), rpc: async () => ({ error: null }) }),
 }));
 vi.mock("@/lib/referrals-server", () => ({ processReferralPaymentEvent: async () => {} }));

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { resolveCheckoutPrice } from "@/lib/stripe-sandbox-guard";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { getDefaultFoundersRulesEngine, RateForfeitedException } from "@/lib/founders";
+import { RateForfeitedException } from "@/lib/founders";
+import { getDefaultFoundersRulesEngine } from "@/lib/founders-engine";
 
 /**
  * Starts the membership checkout session.

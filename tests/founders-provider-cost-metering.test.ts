@@ -76,6 +76,7 @@ describe("Founders Beta — Real Provider Boundary Cost Metering & Zero-Call Enf
       ok: true,
       json: async () => ({
         content: [{ type: "text", text: mockResponseText }],
+        usage: { input_tokens: 15, output_tokens: 25 },
       }),
     } as any);
 
@@ -151,5 +152,36 @@ describe("Founders Beta — Real Provider Boundary Cost Metering & Zero-Call Enf
     ).rejects.toThrow(ConcurrencyLimitExceededException);
 
     expect(fetchSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it("P2-Z4: Missing provider usage metrics strictly throws and retains reservation on hold", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ type: "text", text: "Reply without usage metrics" }],
+        // usage is omitted
+      }),
+    } as any);
+
+    const ledgerBefore = await store.getLedger("rreal", ACCOUNT_ID, MONTH_WINDOW);
+    const initialReservedCost = ledgerBefore.totalReservedCostUsd;
+
+    await expect(
+      callClaude({
+        system: "You are a tutor.",
+        messages: [{ role: "user", content: "Test prompt" }],
+        maxTokens: 50,
+        byok: { anthropic: "sk-ant-test-key" },
+        metering: {
+          accountId: ACCOUNT_ID,
+          companyId: "rreal",
+          meterManager: manager,
+        },
+      }),
+    ).rejects.toThrow(/Provider response omitted required token usage metrics; reservation retained on hold/);
+
+    const ledgerAfter = await store.getLedger("rreal", ACCOUNT_ID, MONTH_WINDOW);
+    expect(ledgerAfter.totalReservedCostUsd).toBeGreaterThan(initialReservedCost);
+    expect(ledgerAfter.totalSettledCostUsd).toBe(ledgerBefore.totalSettledCostUsd);
   });
 });

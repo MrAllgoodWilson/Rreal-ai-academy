@@ -17,7 +17,7 @@ export function resolveCheckoutPrice(env: Readonly<Record<string, string | undef
   const testPrice = env.STRIPE_TEST_PRICE_MONTHLY || "";
   if (!sandboxStorageSafe(env)) return null;
   if (!/^(sk|rk)_test_[A-Za-z0-9]+$/.test(key)) return null;
-  if (!/^price_[A-Za-z0-9]+$/.test(testPrice)) return null;
+  if (!/^price_[A-Za-z0-9_]+$/.test(testPrice)) return null;
   const configuredLivePrice = env.STRIPE_PRICE_MONTHLY || DEFAULT_LIVE_PRICE;
   if (testPrice === DEFAULT_LIVE_PRICE || testPrice === configuredLivePrice) return null;
   return { priceId: testPrice, sandbox: true };

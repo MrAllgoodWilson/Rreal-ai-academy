@@ -10,8 +10,9 @@ import {
   FoundersOffer,
   RateForfeitedException,
   computeTermsHash,
-  setDefaultFoundersRulesEngine,
+  
 } from "@/lib/founders";
+import { setDefaultFoundersRulesEngine } from "@/lib/founders-engine";
 
 vi.mock("server-only", () => ({}));
 
@@ -23,10 +24,10 @@ const db: any = {
   subRows: [] as any[],
 };
 
-const TEST_FOUNDERS_PRICE = "price_testfounders499monthly";
+const TEST_FOUNDERS_PRICE = "price_rreal_founders_499_monthly";
 
 vi.mock("@/lib/stripe", () => ({
-  MONTHLY_PRICE_ID: "price_testfounders499monthly",
+  MONTHLY_PRICE_ID: "price_rreal_founders_499_monthly",
   getStripe: () => ({
     checkout: {
       sessions: {
@@ -101,9 +102,11 @@ vi.mock("@/lib/supabase/server", () => ({
         },
       }),
       select: () => ({
-        eq: () => ({
+        eq: (col?: string, val?: string) => ({
           limit: () => ({
-            maybeSingle: async () => ({ data: null }),
+            maybeSingle: async () => ({
+              data: table === "subscriptions" && col === "stripe_subscription_id" && val ? db.subscriptions.get(val) ?? null : null,
+            }),
           }),
         }),
         or: () => ({
@@ -248,6 +251,7 @@ describe("Founders Beta — Isolated Stripe Test Payment -> Usable Service -> Ca
       ok: true,
       json: async () => ({
         content: [{ type: "text", text: mockModelReply }],
+        usage: { input_tokens: 20, output_tokens: 30 },
       }),
     } as any);
 

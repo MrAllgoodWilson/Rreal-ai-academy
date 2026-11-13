@@ -5,28 +5,13 @@ import * as StripeLib from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { processReferralPaymentEvent } from "@/lib/referrals-server";
 import { CREDIT_PACKS, packByPaymentLink } from "@/lib/credits";
-import { getDefaultFoundersRulesEngine } from "@/lib/founders";
+import { getDefaultFoundersRulesEngine } from "@/lib/founders-engine";
 
 const getStripe = StripeLib.getStripe;
 const verifyWebhook = StripeLib.verifyWebhook;
 const getMonthlyPriceId = () => process.env.STRIPE_PRICE_MONTHLY || "price_1UXevHK68Pw0CGHvMMNt6NeD";
 
 const ACTIVE = new Set(["active", "trialing", "past_due", "canceled", "unpaid", "incomplete", "incomplete_expired", "paused"]);
-
-interface EventOrderRecord {
-  created: number;
-  status: string;
-}
-
-function getExecutionScope(): string {
-  try {
-    const worker = (globalThis as unknown as { __vitest_worker__?: { current?: { name?: string } } }).__vitest_worker__;
-    if (worker?.current?.name) {
-      return worker.current.name;
-    }
-  } catch {}
-  return "";
-}
 
 function isStaleSubscriptionEvent(
   existingStatus: string,
@@ -55,69 +40,43 @@ function isStaleSubscriptionEvent(
       incomplete: 0,
       paused: 0,
     };
-    return (priority[existingStatus] ?? 0)  > (priority[incomingStatus] ?? 0);
+    return (priority[existingStatus] ?? 0) > (priority[incomingStatus] ?? 0);
   }
   return false;
 }
 
-class SubscriptionOrderStore {
-  private records = new Map<string, EventOrderRecord>();
-
-  checkAndTrack(subId: string, eventCreated: number, status: string): boolean {
-    const scope = getExecutionScope();
-    const key = scope ? `${scope}:${subId}` : subId;
-    const existing = this.records.get(key);
-    if (existing) {
-      const existingTimeMs = existing.created * 1000;
-      if (isStaleSubscriptionEvent(existing.status, existingTimeMs, status, eventCreated)) {
-        return false;
-      }
-    }
-    this.records.set(key, { created: eventCreated, status });
-    return true;
-  }
-}
-
-const subscriptionOrderCache = new SubscriptionOrderStore();
-
 /**
- * Durable event ordering:
- * 1. Checks persisted subscription row in Postgres/Supabase across worker isolates.
- * 2. Propagates any Supabase returned query errors (fails closed).
- * 3. Enforces monotonic last_event_created ordering and terminal tie semantics.
- * 4. Falls back to scoped execution tracking when database row is not yet present.
+ * Durable event ordering helper:
+ * Queries persisted subscription in Postgres across worker isolates.
+ * Propagates database query errors immediately (fails closed).
  */
-async function checkAndTrackEventOrder(
+async function isEventStaleInDatabase(
   admin: any,
   subId: string,
   eventCreated: number,
   status: string,
 ): Promise<boolean> {
-  if (!subId || !eventCreated) return true;
+  if (!subId || !eventCreated || !admin) return false;
 
-  if (admin) {
-    const { data: row, error } = await admin
-      .from("subscriptions")
-      .select("status, last_event_created, updated_at")
-      .eq("stripe_subscription_id", subId)
-      .limit(1)
-      .maybeSingle();
+  const { data: row, error } = await admin
+    .from("subscriptions")
+    .select("status, last_event_created, updated_at")
+    .eq("stripe_subscription_id", subId)
+    .limit(1)
+    .maybeSingle();
 
-    if (error) {
-      throw new Error(`subscription order query failed: ${error.message ?? error.code ?? "unknown"}`);
-    }
-
-    if (row) {
-      const existingTimeMs = typeof row.last_event_created === "number"
-        ? row.last_event_created * 1000
-        : (row.updated_at ? new Date(row.updated_at).getTime() : 0);
-      if (isStaleSubscriptionEvent(row.status, existingTimeMs, status, eventCreated)) {
-        return false;
-      }
-    }
+  if (error) {
+    throw new Error(`subscription order query failed: ${error.message ?? error.code ?? "unknown"}`);
   }
 
-  return subscriptionOrderCache.checkAndTrack(subId, eventCreated, status);
+  if (row) {
+    const existingTimeMs = typeof row.last_event_created === "number"
+      ? row.last_event_created * 1000
+      : (row.updated_at ? new Date(row.updated_at).getTime() : 0);
+    return isStaleSubscriptionEvent(row.status, existingTimeMs, status, eventCreated);
+  }
+
+  return false;
 }
 
 // F6 [E8/E9]: Price allow-list: strictly derived from configured prices
@@ -211,31 +170,46 @@ export async function POST(req: Request) {
     const subId = String(row.stripe_subscription_id || "");
     const incomingStatus = String(row.status || "");
 
-    if (subId && eventTimestamp) {
-      const { data: latest, error: selectErr } = await admin
-        .from("subscriptions")
-        .select("status, last_event_created, updated_at")
-        .eq("stripe_subscription_id", subId)
-        .limit(1)
-        .maybeSingle();
-
-      if (selectErr) {
-        orThrow("subscription ordering query", selectErr);
+    // 1. Atomic PostgreSQL function (migration 0011 upsert_subscription_ordered).
+    // Real DB errors fail closed (throw -> 500 -> Stripe retry). Only a missing function
+    // (migration not applied: PGRST202 / 42883) or an RPC that returns no result falls through.
+    const { data: rpcData, error: rpcErr } = await admin.rpc("upsert_subscription_ordered", {
+      p_sub_id: subId,
+      p_user_id: row.user_id,
+      p_customer_id: row.stripe_customer_id,
+      p_status: incomingStatus,
+      p_plan: row.plan ?? "academy_monthly",
+      p_current_period_end: row.current_period_end,
+      p_cancel_at_period_end: Boolean(row.cancel_at_period_end),
+      p_event_created: eventTimestamp ?? null,
+      p_updated_at: updatedAt,
+    });
+    if (rpcErr && rpcErr.code !== "PGRST202" && rpcErr.code !== "42883") {
+      orThrow("atomic subscription upsert", rpcErr);
+      return;
+    }
+    if (!rpcErr && rpcData && typeof rpcData === "object" && "updated" in rpcData) {
+      if (!(rpcData as { updated: boolean }).updated) {
+        console.warn("Stripe webhook: ignored out-of-order stale subscription write via atomic SQL function", subId);
       }
+      return;
+    }
 
-      if (latest) {
-        const existingTimeMs = typeof latest.last_event_created === "number"
-          ? latest.last_event_created * 1000
-          : (latest.updated_at ? new Date(latest.updated_at).getTime() : 0);
-        if (isStaleSubscriptionEvent(latest.status, existingTimeMs, incomingStatus, eventTimestamp)) {
-          console.warn("Stripe webhook: ignored out-of-order stale subscription write", subId);
-          return;
-        }
+    // 2. Direct conditional database upsert fallback
+    if (subId && eventTimestamp) {
+      const isStale = await isEventStaleInDatabase(admin, subId, eventTimestamp, incomingStatus);
+      if (isStale) {
+        console.warn("Stripe webhook: ignored out-of-order stale subscription write", subId);
+        return;
       }
     }
 
     const { error } = await admin.from("subscriptions").upsert(
-      { ...row, last_event_created: eventTimestamp ?? null, updated_at: updatedAt },
+      {
+        ...row,
+        ...(eventTimestamp ? { last_event_created: eventTimestamp } : {}),
+        updated_at: updatedAt,
+      },
       { onConflict: "stripe_subscription_id" }
     );
     orThrow("membership save", error);
@@ -284,7 +258,7 @@ export async function POST(req: Request) {
       const stripe = getStripe();
       if (stripe) {
         // F1 [E9/E3]: Out-of-order delivery defense
-        if (!(await checkAndTrackEventOrder(admin, subId, event.created ?? 0, "active"))) {
+        if (await isEventStaleInDatabase(admin, subId, event.created ?? 0, "active")) {
           console.warn("Stripe webhook: ignored out-of-order stale checkout session", subId);
           return;
         }
@@ -359,7 +333,7 @@ export async function POST(req: Request) {
         activeSubId = sub.id;
 
         // F1 [E9/E3]: Out-of-order event defense: do not overwrite newer state with older created event
-        if (!(await checkAndTrackEventOrder(admin, sub.id, event.created ?? 0, sub.status))) {
+        if (await isEventStaleInDatabase(admin, sub.id, event.created ?? 0, sub.status)) {
           console.warn("Stripe webhook: ignored out-of-order stale subscription event", sub.id);
           break;
         }

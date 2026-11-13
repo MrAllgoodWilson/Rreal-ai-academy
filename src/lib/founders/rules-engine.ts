@@ -589,8 +589,8 @@ export class AccountBoundRulesEngine {
     }
 
     const subObj = event.data.object;
-    const metadata = subObj?.metadata || {};
-    const accountId = subObj?.client_reference_id || metadata?.user_id || metadata?.account_id;
+    const accountId = subObj.client_reference_id;
+    const metadata = subObj.metadata || {};
     const itemPrice = subObj.items?.data?.[0]?.price;
     const priceId = itemPrice?.id;
 
@@ -646,13 +646,8 @@ export class AccountBoundRulesEngine {
       }
 
       // 6. Price Allow-List Check
-      const configuredPrices = [
-        process.env.STRIPE_FOUNDERS_PRICE_ID,
-        process.env.NEXT_PUBLIC_STRIPE_FOUNDERS_PRICE_ID,
-        cfg ? cfg.foundersPriceId : `price_${companyId}_founders_499_monthly`,
-      ].filter(Boolean);
-      const allowedFoundersPrice = (configuredPrices[0] as string) || (cfg ? cfg.foundersPriceId : `price_${companyId}_founders_499_monthly`);
-      if (priceId && !configuredPrices.includes(priceId)) {
+      const allowedFoundersPrice = cfg ? cfg.foundersPriceId : `price_${companyId}_founders_499_monthly`;
+      if (priceId && priceId !== allowedFoundersPrice) {
         if (priceId.includes('standard') || priceId.includes('29')) {
           await this.store.recordProcessedEvent(event.id);
           return { status: 'non_founders_price_ignored' };
@@ -866,35 +861,4 @@ export class AccountBoundRulesEngine {
       throw err;
     }
   }
-}
-
-import { MemoryFoundersStore } from './memory-store';
-import { PostgresFoundersStore } from './postgres-store';
-
-let defaultEngine: AccountBoundRulesEngine | null = null;
-
-export function getDefaultFoundersRulesEngine(): AccountBoundRulesEngine {
-  if (!defaultEngine) {
-    const dbUrl = process.env.DATABASE_URL || process.env.TEST_DATABASE_URL;
-    if (dbUrl) {
-      try {
-        const { Pool } = require("pg");
-        defaultEngine = new AccountBoundRulesEngine(new PostgresFoundersStore(new Pool({ connectionString: dbUrl })));
-        return defaultEngine;
-      } catch (err) {
-        if (process.env.NODE_ENV === "production") {
-          throw new Error("Failed to initialize durable PostgresFoundersStore in production: " + (err as Error).message);
-        }
-      }
-    }
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("Durable PostgresFoundersStore requires DATABASE_URL in production. In-memory fallback is prohibited.");
-    }
-    defaultEngine = new AccountBoundRulesEngine(new MemoryFoundersStore());
-  }
-  return defaultEngine;
-}
-
-export function setDefaultFoundersRulesEngine(engine: AccountBoundRulesEngine | null): void {
-  defaultEngine = engine;
 }

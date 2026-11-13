@@ -193,11 +193,13 @@ export async function callClaude(opts: ClaudeCallOptions): Promise<string | null
       1,
       async () => {
         const details = await executeProviderCallWithDetails(opts);
-        const outLen = details.result?.length || 0;
+        if (typeof details.actualInputTokens !== "number" || typeof details.actualOutputTokens !== "number") {
+          throw new Error("Provider response omitted required token usage metrics; reservation retained on hold for reconciliation");
+        }
         return {
           result: details.result,
-          actualInputTokens: details.actualInputTokens ?? estimatedPromptTokens,
-          actualOutputTokens: details.actualOutputTokens ?? Math.max(1, Math.ceil(outLen / 4)),
+          actualInputTokens: details.actualInputTokens,
+          actualOutputTokens: details.actualOutputTokens,
         };
       },
     );

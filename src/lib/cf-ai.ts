@@ -8,7 +8,20 @@ import "server-only";
 
 type AiBinding = { run: (model: string, input: Record<string, unknown>, options?: Record<string, unknown>) => Promise<unknown> };
 
-export const CF_TEXT_MODEL = () => process.env.WORKERS_AI_MODEL || "@cf/meta/llama-3.2-3b-instruct";
+export const ALLOWED_WORKERS_AI_MODELS: Record<string, string> = {
+  "@cf/meta/llama-3.2-3b-instruct": "llama-3.2-3b",
+};
+
+export const CF_TEXT_MODEL = () => {
+  const envModel = process.env.WORKERS_AI_MODEL;
+  if (envModel) {
+    if (!ALLOWED_WORKERS_AI_MODELS[envModel]) {
+      throw new Error(`WORKERS_AI_MODEL '${envModel}' is not in the approved Founders Beta model allow-list`);
+    }
+    return envModel;
+  }
+  return "@cf/meta/llama-3.2-3b-instruct";
+};
 export const CF_TTS_MODEL = "@cf/myshell-ai/melotts";
 
 export async function getAi(): Promise<AiBinding | null> {
