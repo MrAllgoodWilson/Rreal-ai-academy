@@ -1,19 +1,7 @@
 export { verifyTargetGuard } from './target-guard';
 export type { TargetGuardQueryable, TargetGuardOptions, TargetGuardVerificationResult } from './target-guard';
 import * as crypto from 'crypto';
-export interface PgQueryResult<R = any> {
-  rows: R[];
-  rowCount?: number | null;
-}
-export interface PgQueryable {
-  query<R = any>(queryTextOrConfig: string | { text: string; values?: any[] }, values?: any[]): Promise<PgQueryResult<R>>;
-}
-export interface Pool extends PgQueryable {
-  connect(): Promise<PoolClient>;
-}
-export interface PoolClient extends PgQueryable {
-  release(): void;
-}
+import { Pool, PoolClient } from 'pg';
 import {
   AuthenticatedAccount,
   CompanyId,
@@ -389,7 +377,7 @@ export class PostgresFoundersStore implements IFoundersStore {
       `SELECT * FROM founders_audit_trail WHERE immutable_account_id = $1 ORDER BY timestamp ASC`,
       [accountId],
     );
-    return res.rows.map((r: any) => ({
+    return res.rows.map((r) => ({
       id: r.id,
       companyId: r.company_id,
       immutableAccountId: r.immutable_account_id,
@@ -597,7 +585,7 @@ export class PostgresFoundersCostStore implements IFoundersCostStore {
        ORDER BY created_at ASC`,
       [accountUuid],
     );
-    return res.rows.map((r: any) => ({
+    return res.rows.map((r) => ({
       id: r.id,
       companyId: r.company_id,
       accountId: r.immutable_account_id,

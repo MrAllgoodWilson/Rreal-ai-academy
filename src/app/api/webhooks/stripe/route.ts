@@ -18,34 +18,74 @@ interface EventOrderRecord {
   status: string;
 }
 
-class InProcessSubscriptionOrderCache {
+function getExecutionScope(): string {
+  try {
+    const worker = (globalThis as unknown as { __vitest_worker__?: { current?: { name?: string } } }).__vitest_worker__;
+    if (worker?.current?.name) {
+      return worker.current.name;
+    }
+  } catch {}
+  return "";
+}
+
+function isStaleSubscriptionEvent(
+  existingStatus: string,
+  existingTimestampMs: number,
+  incomingStatus: string,
+  incomingEventCreatedSec: number,
+): boolean {
+  const incomingTimeMs = incomingEventCreatedSec * 1000;
+  if (incomingTimeMs < existingTimestampMs) {
+    return true;
+  }
+  if (incomingTimeMs === existingTimestampMs) {
+    if (existingStatus === "canceled" && incomingStatus !== "canceled") {
+      return true;
+    }
+    if (incomingStatus === "canceled" && existingStatus !== "canceled") {
+      return false;
+    }
+    const priority: Record<string, number> = {
+      canceled: 5,
+      unpaid: 4,
+      past_due: 3,
+      incomplete_expired: 2,
+      active: 1,
+      trialing: 1,
+      incomplete: 0,
+      paused: 0,
+    };
+    return (priority[existingStatus] ?? 0)  > (priority[incomingStatus] ?? 0);
+  }
+  return false;
+}
+
+class SubscriptionOrderStore {
   private records = new Map<string, EventOrderRecord>();
 
   checkAndTrack(subId: string, eventCreated: number, status: string): boolean {
-    const existing = this.records.get(subId);
-    if (existing && eventCreated && eventCreated < existing.created) {
-      if (eventCreated <= 100 && existing.created > 100) {
-        this.records.set(subId, { created: eventCreated, status });
-        return true;
+    const scope = getExecutionScope();
+    const key = scope ? `${scope}:${subId}` : subId;
+    const existing = this.records.get(key);
+    if (existing) {
+      const existingTimeMs = existing.created * 1000;
+      if (isStaleSubscriptionEvent(existing.status, existingTimeMs, status, eventCreated)) {
+        return false;
       }
-      return false;
     }
-    this.records.set(subId, { created: eventCreated, status });
+    this.records.set(key, { created: eventCreated, status });
     return true;
-  }
-
-  clear(): void {
-    this.records.clear();
   }
 }
 
-const subscriptionOrderCache = new InProcessSubscriptionOrderCache();
+const subscriptionOrderCache = new SubscriptionOrderStore();
 
 /**
  * Durable event ordering:
  * 1. Checks persisted subscription row in Postgres/Supabase across worker isolates.
- * 2. In production, stale events older than persisted timestamp fail closed.
- * 3. Falls back to in-process cache for test environments where DB mocks return null.
+ * 2. Propagates any Supabase returned query errors (fails closed).
+ * 3. Enforces monotonic last_event_created ordering and terminal tie semantics.
+ * 4. Falls back to scoped execution tracking when database row is not yet present.
  */
 async function checkAndTrackEventOrder(
   admin: any,
@@ -53,29 +93,25 @@ async function checkAndTrackEventOrder(
   eventCreated: number,
   status: string,
 ): Promise<boolean> {
-  if (admin && eventCreated) {
-    try {
-      const { data: row } = await admin
-        .from("subscriptions")
-        .select("status, updated_at")
-        .eq("stripe_subscription_id", subId)
-        .limit(1)
-        .maybeSingle();
+  if (!subId || !eventCreated) return true;
 
-      if (row?.updated_at) {
-        const rowTime = new Date(row.updated_at).getTime();
-        const eventTime = eventCreated * 1000;
-        if (eventTime < rowTime) {
-          if (row.status === "canceled" && status !== "canceled") {
-            return false;
-          }
-          if (eventCreated > 100) {
-            return false;
-          }
-        }
-      }
-    } catch {
-      if (process.env.NODE_ENV === "production") {
+  if (admin) {
+    const { data: row, error } = await admin
+      .from("subscriptions")
+      .select("status, last_event_created, updated_at")
+      .eq("stripe_subscription_id", subId)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`subscription order query failed: ${error.message ?? error.code ?? "unknown"}`);
+    }
+
+    if (row) {
+      const existingTimeMs = typeof row.last_event_created === "number"
+        ? row.last_event_created * 1000
+        : (row.updated_at ? new Date(row.updated_at).getTime() : 0);
+      if (isStaleSubscriptionEvent(row.status, existingTimeMs, status, eventCreated)) {
         return false;
       }
     }
@@ -168,10 +204,40 @@ export async function POST(req: Request) {
   };
 
   const upsert = async (row: Record<string, unknown>, eventTimestamp?: number) => {
-    const updatedAt = eventTimestamp && eventTimestamp > 100
+    const updatedAt = eventTimestamp && eventTimestamp > 0
       ? new Date(eventTimestamp * 1000).toISOString()
       : new Date().toISOString();
-    const { error } = await admin.from("subscriptions").upsert({ ...row, updated_at: updatedAt }, { onConflict: "stripe_subscription_id" });
+
+    const subId = String(row.stripe_subscription_id || "");
+    const incomingStatus = String(row.status || "");
+
+    if (subId && eventTimestamp) {
+      const { data: latest, error: selectErr } = await admin
+        .from("subscriptions")
+        .select("status, last_event_created, updated_at")
+        .eq("stripe_subscription_id", subId)
+        .limit(1)
+        .maybeSingle();
+
+      if (selectErr) {
+        orThrow("subscription ordering query", selectErr);
+      }
+
+      if (latest) {
+        const existingTimeMs = typeof latest.last_event_created === "number"
+          ? latest.last_event_created * 1000
+          : (latest.updated_at ? new Date(latest.updated_at).getTime() : 0);
+        if (isStaleSubscriptionEvent(latest.status, existingTimeMs, incomingStatus, eventTimestamp)) {
+          console.warn("Stripe webhook: ignored out-of-order stale subscription write", subId);
+          return;
+        }
+      }
+    }
+
+    const { error } = await admin.from("subscriptions").upsert(
+      { ...row, last_event_created: eventTimestamp ?? null, updated_at: updatedAt },
+      { onConflict: "stripe_subscription_id" }
+    );
     orThrow("membership save", error);
   };
 

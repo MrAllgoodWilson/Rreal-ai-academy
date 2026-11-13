@@ -1,5 +1,5 @@
 import "server-only";
-import { cfText } from "@/lib/cf-ai";
+import { cfText, cfTextWithDetails } from "@/lib/cf-ai";
 import type { Byok } from "@/lib/byok-server";
 import {
   CostMeteringManager,
@@ -12,22 +12,16 @@ let defaultManager: CostMeteringManager | null = null;
 
 function createDefaultStore() {
   const dbUrl = process.env.DATABASE_URL || process.env.TEST_DATABASE_URL;
-  if (dbUrl) {
-    try {
-      const { Pool } = require("pg");
-      const { PostgresFoundersCostStore } = require("./founders");
-      return new PostgresFoundersCostStore(new Pool({ connectionString: dbUrl }));
-    } catch (err) {
-      if (process.env.NODE_ENV === "production") {
-        throw new Error("Failed to initialize durable PostgresFoundersCostStore in production: " + (err as Error).message);
-      }
-    }
+  if (!dbUrl) {
+    throw new Error("Durable PostgresFoundersCostStore requires DATABASE_URL or TEST_DATABASE_URL. In-memory fallback is prohibited.");
   }
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("Durable PostgresFoundersCostStore requires DATABASE_URL in production. In-memory fallback is prohibited.");
+  try {
+    const { Pool } = require("pg");
+    const { PostgresFoundersCostStore } = require("./founders");
+    return new PostgresFoundersCostStore(new Pool({ connectionString: dbUrl }));
+  } catch (err) {
+    throw new Error("Failed to initialize durable PostgresFoundersCostStore: " + (err as Error).message);
   }
-  const { MemoryFoundersCostStore } = require("./founders");
-  return new MemoryFoundersCostStore();
 }
 
 export function getDefaultCostMeteringManager(): CostMeteringManager {
@@ -74,10 +68,12 @@ export async function executeProviderCallWithDetails(opts: {
 
   const key = opts.byok?.anthropic || process.env.ANTHROPIC_API_KEY;
   if (!key) {
-    const text = await cfText(opts);
+    const cf = await cfTextWithDetails(opts);
     return {
-      result: text,
-      modelUsed: "llama-3.2-3b",
+      result: cf.text,
+      actualInputTokens: cf.usage?.promptTokens,
+      actualOutputTokens: cf.usage?.completionTokens,
+      modelUsed: cf.modelUsed,
     };
   }
 
@@ -97,8 +93,13 @@ export async function executeProviderCallWithDetails(opts: {
   if (!res.ok) {
     console.error("Claude API error", res.status);
     if (own) return { result: null, modelUsed: model };
-    const text = await cfText(opts);
-    return { result: text, modelUsed: "llama-3.2-3b" };
+    const cf = await cfTextWithDetails(opts);
+    return {
+      result: cf.text,
+      actualInputTokens: cf.usage?.promptTokens,
+      actualOutputTokens: cf.usage?.completionTokens,
+      modelUsed: cf.modelUsed,
+    };
   }
 
   const json = (await res.json()) as {

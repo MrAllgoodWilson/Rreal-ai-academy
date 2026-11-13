@@ -8,7 +8,7 @@ import "server-only";
 
 type AiBinding = { run: (model: string, input: Record<string, unknown>, options?: Record<string, unknown>) => Promise<unknown> };
 
-export const CF_TEXT_MODEL = () => process.env.WORKERS_AI_MODEL || "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+export const CF_TEXT_MODEL = () => process.env.WORKERS_AI_MODEL || "@cf/meta/llama-3.2-3b-instruct";
 export const CF_TTS_MODEL = "@cf/myshell-ai/melotts";
 
 export async function getAi(): Promise<AiBinding | null> {
@@ -38,9 +38,28 @@ export function extractText(out: unknown): string | null {
 
 type Msg = { role: "user" | "assistant"; content: string };
 
-export async function cfText(opts: { system: string; messages: Msg[]; maxTokens?: number }): Promise<string | null> {
+export function extractUsage(out: unknown): { promptTokens?: number; completionTokens?: number } | undefined {
+  if (!out || typeof out !== "object") return undefined;
+  const o = out as Record<string, unknown>;
+  const u = (o.usage || (o as any).raw?.usage) as Record<string, unknown> | undefined;
+  if (!u || typeof u !== "object") return undefined;
+  const promptTokens = typeof u.prompt_tokens === "number" ? u.prompt_tokens : typeof u.promptTokens === "number" ? u.promptTokens : undefined;
+  const completionTokens = typeof u.completion_tokens === "number" ? u.completion_tokens : typeof u.completionTokens === "number" ? u.completionTokens : undefined;
+  if (promptTokens !== undefined || completionTokens !== undefined) {
+    return { promptTokens, completionTokens };
+  }
+  return undefined;
+}
+
+export interface CfTextResult {
+  text: string | null;
+  usage?: { promptTokens?: number; completionTokens?: number };
+  modelUsed: string;
+}
+
+export async function cfTextWithDetails(opts: { system: string; messages: Msg[]; maxTokens?: number }): Promise<CfTextResult> {
   const ai = await getAi();
-  if (!ai) return null;
+  if (!ai) return { text: null, modelUsed: "llama-3.2-3b" };
   const maxTokens = opts.maxTokens ?? 700;
 
   // Optional: real Claude through AI Gateway Unified Billing (credits loaded in the Cloudflare dashboard, no Anthropic key).
@@ -50,19 +69,35 @@ export async function cfText(opts: { system: string; messages: Msg[]; maxTokens?
     try {
       const out = await ai.run(gatewayModel, { system: opts.system, messages: opts.messages, max_tokens: maxTokens }, { gateway: { id: gateway } });
       const text = extractText(out);
-      if (text) return text;
+      if (text) {
+        return {
+          text,
+          usage: extractUsage(out),
+          modelUsed: gatewayModel,
+        };
+      }
     } catch (e) {
       console.error("AI Gateway model failed, falling back to Workers AI", gatewayModel, e);
     }
   }
 
+  const model = CF_TEXT_MODEL();
   try {
-    const out = await ai.run(CF_TEXT_MODEL(), { messages: [{ role: "system", content: opts.system }, ...opts.messages], max_tokens: maxTokens });
-    return extractText(out);
+    const out = await ai.run(model, { messages: [{ role: "system", content: opts.system }, ...opts.messages], max_tokens: maxTokens });
+    return {
+      text: extractText(out),
+      usage: extractUsage(out),
+      modelUsed: "llama-3.2-3b",
+    };
   } catch (e) {
     console.error("Workers AI text error", e);
-    return null;
+    return { text: null, modelUsed: "llama-3.2-3b" };
   }
+}
+
+export async function cfText(opts: { system: string; messages: Msg[]; maxTokens?: number }): Promise<string | null> {
+  const res = await cfTextWithDetails(opts);
+  return res.text;
 }
 
 async function toBytes(out: unknown): Promise<Uint8Array | null> {
