@@ -9,9 +9,23 @@ import {
 } from "@/lib/founders";
 
 let defaultManager: CostMeteringManager | null = null;
+
 export function getDefaultCostMeteringManager(): CostMeteringManager {
   if (!defaultManager) {
-    defaultManager = new CostMeteringManager(new MemoryFoundersCostStore());
+    const dbUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+    if (dbUrl) {
+      try {
+        // Dynamic load for durable database-backed cost store when connection available
+        const { Pool } = require("pg");
+        const pool = new Pool({ connectionString: dbUrl });
+        const { PostgresFoundersCostStore } = require("./founders");
+        defaultManager = new CostMeteringManager(new PostgresFoundersCostStore(pool));
+      } catch {
+        defaultManager = new CostMeteringManager(new MemoryFoundersCostStore());
+      }
+    } else {
+      defaultManager = new CostMeteringManager(new MemoryFoundersCostStore());
+    }
   }
   return defaultManager;
 }
@@ -33,48 +47,111 @@ export interface ClaudeCallOptions {
   };
 }
 
-/** Internal provider execution logic */
+export interface ProviderCallDetails {
+  result: string | null;
+  actualInputTokens?: number;
+  actualOutputTokens?: number;
+  modelUsed: string;
+}
+
+/** Internal provider execution logic with actual usage extraction */
+export async function executeProviderCallWithDetails(opts: {
+  system: string;
+  messages: { role: "user" | "assistant"; content: string }[];
+  maxTokens?: number;
+  byok?: Byok;
+}): Promise<ProviderCallDetails> {
+  if (opts.byok?.openai && !opts.byok.anthropic) {
+    return callOpenAIWithDetails(opts.byok.openai, opts);
+  }
+
+  const key = opts.byok?.anthropic || process.env.ANTHROPIC_API_KEY;
+  if (!key) {
+    const text = await cfText(opts);
+    return {
+      result: text,
+      modelUsed: "llama-3.2-3b",
+    };
+  }
+
+  const own = Boolean(opts.byok?.anthropic);
+  const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify({
+      model,
+      max_tokens: opts.maxTokens ?? 700,
+      system: opts.system,
+      messages: opts.messages,
+    }),
+  });
+
+  if (!res.ok) {
+    console.error("Claude API error", res.status);
+    if (own) return { result: null, modelUsed: model };
+    const text = await cfText(opts);
+    return { result: text, modelUsed: "llama-3.2-3b" };
+  }
+
+  const json = (await res.json()) as {
+    content?: { type: string; text?: string }[];
+    usage?: { input_tokens?: number; output_tokens?: number };
+  };
+
+  const text = json.content?.filter((c) => c.type === "text").map((c) => c.text).join("\n").trim() || null;
+  return {
+    result: text,
+    actualInputTokens: json.usage?.input_tokens,
+    actualOutputTokens: json.usage?.output_tokens,
+    modelUsed: model,
+  };
+}
+
+/** Legacy wrapper maintaining string | null contract */
 export async function executeProviderCall(opts: {
   system: string;
   messages: { role: "user" | "assistant"; content: string }[];
   maxTokens?: number;
   byok?: Byok;
 }): Promise<string | null> {
-  if (opts.byok?.openai && !opts.byok.anthropic) return callOpenAI(opts.byok.openai, opts);
-  const key = opts.byok?.anthropic || process.env.ANTHROPIC_API_KEY;
-  if (!key) return cfText(opts);
-  const own = Boolean(opts.byok?.anthropic);
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({
-      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5",
-      max_tokens: opts.maxTokens ?? 700,
-      system: opts.system,
-      messages: opts.messages,
-    }),
-  });
-  if (!res.ok) {
-    console.error("Claude API error", res.status);
-    return own ? null : cfText(opts);
-  }
-  const json = (await res.json()) as { content?: { type: string; text?: string }[] };
-  return json.content?.filter((c) => c.type === "text").map((c) => c.text).join("\n").trim() || null;
+  const details = await executeProviderCallWithDetails(opts);
+  return details.result;
 }
 
-/** OpenAI Chat Completions with a member's own key. */
-async function callOpenAI(key: string, opts: { system: string; messages: { role: "user" | "assistant"; content: string }[]; maxTokens?: number }): Promise<string | null> {
+/** OpenAI Chat Completions with member's own key */
+async function callOpenAIWithDetails(
+  key: string,
+  opts: { system: string; messages: { role: "user" | "assistant"; content: string }[]; maxTokens?: number }
+): Promise<ProviderCallDetails> {
+  const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-    body: JSON.stringify({ model: process.env.OPENAI_MODEL || "gpt-4.1-mini", max_tokens: opts.maxTokens ?? 700, messages: [{ role: "system", content: opts.system }, ...opts.messages] }),
+    body: JSON.stringify({
+      model,
+      max_tokens: opts.maxTokens ?? 700,
+      messages: [{ role: "system", content: opts.system }, ...opts.messages],
+    }),
   });
+
   if (!res.ok) {
     console.error("OpenAI API error", res.status);
-    return null;
+    return { result: null, modelUsed: model };
   }
-  const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-  return json.choices?.[0]?.message?.content?.trim() || null;
+
+  const json = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  };
+
+  const text = json.choices?.[0]?.message?.content?.trim() || null;
+  return {
+    result: text,
+    actualInputTokens: json.usage?.prompt_tokens,
+    actualOutputTokens: json.usage?.completion_tokens,
+    modelUsed: model,
+  };
 }
 
 /**
@@ -83,12 +160,19 @@ async function callOpenAI(key: string, opts: { system: string; messages: { role:
  * and that provider timeouts strictly retain reservations to prevent double-spending in-flight compute.
  */
 export async function callClaude(opts: ClaudeCallOptions): Promise<string | null> {
+  if (process.env.ENFORCE_FOUNDERS_METERING === "true" && !opts.metering && !opts.byok) {
+    throw new Error("Founders Beta requires metered account context for managed provider execution.");
+  }
+
   if (opts.metering) {
     const manager = opts.metering.meterManager ?? getDefaultCostMeteringManager();
     const promptLen = opts.messages.reduce((acc, m) => acc + (m.content?.length || 0), 0) + (opts.system?.length || 0);
     const estimatedPromptTokens = Math.max(1, Math.ceil(promptLen / 4));
     const estimatedCompletionTokens = opts.maxTokens ?? 700;
     const companyId = opts.metering.companyId || "rreal";
+
+    // Align billed model with actual execution path:
+    // BYOK users pay their own provider; managed Founders Beta uses llama-3.2-3b
     const modelKey = opts.metering.modelKey || "llama-3.2-3b";
 
     return await dispatchWithCostMetering(
@@ -100,12 +184,12 @@ export async function callClaude(opts: ClaudeCallOptions): Promise<string | null
       estimatedCompletionTokens,
       1,
       async () => {
-        const result = await executeProviderCall(opts);
-        const outLen = result?.length || 0;
+        const details = await executeProviderCallWithDetails(opts);
+        const outLen = details.result?.length || 0;
         return {
-          result,
-          actualInputTokens: estimatedPromptTokens,
-          actualOutputTokens: Math.max(1, Math.ceil(outLen / 4)),
+          result: details.result,
+          actualInputTokens: details.actualInputTokens ?? estimatedPromptTokens,
+          actualOutputTokens: details.actualOutputTokens ?? Math.max(1, Math.ceil(outLen / 4)),
         };
       },
     );
