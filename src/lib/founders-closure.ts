@@ -19,25 +19,36 @@ export function emailHash(email: string): string {
 /**
  * Account closure for the Founders policy. MUST complete before any destructive deletion of the account.
  *
- * In one transaction, under the per-account lock: the Founders eligibility (if any) becomes permanently forfeited,
- * any enrollment is canceled, an `account_closed` audit entry is written, and the account's e-mail HASH is indexed.
- * Those rows live in the `founders` schema with no foreign key to the profile, so they survive the deletion as the
- * minimal tombstone: account id, hashed e-mail, forfeiture and audit - nothing else about the person.
+ * Data minimisation: an account that has NO Founders eligibility or enrollment gets nothing written here - no audit
+ * row, no tombstone, no identity key required - and its deletion proceeds normally ("no_founders_record").
  *
- * Returns "not_configured" only when this deployment has no Founders storage at all (no Founders account can exist).
+ * For an account that DOES have a Founders record, in one transaction and under the per-account lock (the same lock
+ * operator qualification takes, so a concurrent qualification serializes against this check): eligibility becomes
+ * permanently forfeited, any enrollment is canceled, an `account_closed` audit entry is written, and the keyed
+ * e-mail signal is indexed. Those rows live in the `founders` schema with no foreign key to the profile, so they
+ * survive the deletion as the minimal tombstone. The identity key is required ONLY on this path; if it is missing
+ * or too short the transaction rolls back and this THROWS, so the caller deletes nothing.
+ *
+ * "not_configured": this deployment has no Founders storage at all (no Founders account can exist).
  * If storage is configured but unavailable this THROWS, and the caller must delete nothing.
  * Safe to repeat: a retry after a crash re-asserts the same terminal state.
  */
-export async function closeFoundersAccount(accountId: string, email: string | null | undefined): Promise<"closed" | "not_configured"> {
+export type ClosureOutcome = "closed" | "no_founders_record" | "not_configured";
+
+export async function closeFoundersAccount(accountId: string, email: string | null | undefined): Promise<ClosureOutcome> {
   if (!foundersStorageConfigured()) return "not_configured";
   const store = getFoundersStore();
-  await withFoundersAccountLock(COMPANY, accountId, () =>
-    store.withTransaction(async (txn) => {
+  return withFoundersAccountLock(COMPANY, accountId, () =>
+    store.withTransaction(async (txn): Promise<ClosureOutcome> => {
+      const [eligibility, enrollment] = await Promise.all([txn.getEligibility(COMPANY, accountId), txn.getEnrollment(COMPANY, accountId)]);
+      if (!eligibility && !enrollment) return "no_founders_record";
+      // Compute the keyed signal first: a missing key must fail before any state is written.
+      const signal = email ? emailHash(email) : null;
       await new AccountBoundRulesEngine(txn, foundersEngineConfig()).handleAccountClosure(COMPANY, accountId);
-      if (email && txn.indexIdentitySignals) await txn.indexIdentitySignals(COMPANY, accountId, { emailHash: emailHash(email) });
+      if (signal && txn.indexIdentitySignals) await txn.indexIdentitySignals(COMPANY, accountId, { emailHash: signal });
+      return "closed";
     }),
   );
-  return "closed";
 }
 
 /**

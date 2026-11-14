@@ -54,7 +54,7 @@ export async function POST(req: Request) {
   // Founders policy: closing the original account permanently forfeits the Founders rate. Record that (forfeiture,
   // canceled enrollment, audit entry, hashed e-mail tombstone) BEFORE anything is destroyed. If Founders storage is
   // configured but unavailable, delete nothing.
-  let closure: "closed" | "not_configured";
+  let closure: Awaited<ReturnType<typeof closeFoundersAccount>>;
   try {
     closure = await closeFoundersAccount(user.id, user.email);
   } catch (e) {

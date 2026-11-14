@@ -50,10 +50,10 @@ function launch(action, params, startAt) {
 }
 /** Launch all workers, wait until every one has loaded its modules, and only then let them go together. */
 async function runTogether(jobs) {
-  const startAt = Date.now() + 15000;
+  const startAt = Date.now() + 45000;
   const ws = jobs.map(([a, p]) => launch(a, p, startAt));
   const t = Date.now();
-  while (!ws.every((w) => fs.existsSync(`${w.out}.ready`)) && Date.now() - t < 14000) await sleep(50);
+  while (!ws.every((w) => fs.existsSync(`${w.out}.ready`)) && Date.now() - t < 44000) await sleep(50);
   const ready = ws.filter((w) => fs.existsSync(`${w.out}.ready`)).length;
   await Promise.all(ws.map((w) => w.done));
   const results = ws.map((w) => w.result());

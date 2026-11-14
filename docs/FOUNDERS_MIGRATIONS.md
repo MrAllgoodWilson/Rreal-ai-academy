@@ -64,9 +64,15 @@ the model provider (counting stub). No request leaves the machine.
 | X | `tests/pgint-multiproc.mjs` + `tests/webhook-worker.pgint.ts` | separate OS processes released together: 8 on one new subscription; 4 admitted + 8 simultaneous → exactly 5; one event ×6 → one enrollment/audit/mirror; SIGKILL inside the engine transaction and inside the mirror write (fault window asserted) → retry converges once; cancel-vs-renew tie → canceled and forfeited |
 | C | `tests/metering.pgint.ts` | no entitlement / quota exhausted / over limits / model override → zero provider calls; settlement from provider usage; missing usage or timeout → held, blocks further spend, evidence-based reconcile; state survives re-wiring; member-key calls never touch the meter |
 | L | `tests/login-limiter.pgint.ts` | rotating `X-Forwarded-For` does not evade; attacker stopped per account+address while the owner signs in elsewhere; counters durable across module reload; limiter outage → 503 |
+| D | `tests/account-closure.pgint.ts` | deletion blocked by a live subscription; forfeiture + keyed tombstone before the delete; crash/failure between closure and delete converges; storage down -> nothing deleted; delete + re-register cannot requalify; closure racing a renewal; **ordinary accounts leave nothing behind and are never blocked by the key (D7/D8)**; **a Founders account without the key is refused and rolls back whole (D9)**; qualification racing deletion never leaves an orphan (D10); repeat closure keeps one eligibility/signal (D11) |
+| W | `tests/webhook-lock-timeout.pgint.ts`, `tests/account-lock.pgint.ts` | lock not obtainable -> 5xx after a real >= 4 s wait, event stays `processing`, nothing granted, retry converges once; a held lock on one account does not stall another; first-insert race through the route; forward/reversed/shuffled duplicate + out-of-order replay all end in the same terminal state; ten accounts' lock work does not starve the data pool |
 
 `npm test` runs the mock/unit suite only. The pgint files need the local stack and are run with
 `vitest run --config vitest.pgint.config.mts`.
+
+Pilot-cap note for the D and W files: they need more than five Founders accounts, so the counter on the harness-owned
+database is reset before each test. The cap itself is proven in the X series (4 admitted + 8 simultaneous -> exactly 5
+ever) where the counter is never reset.
 
 ### Superseded probe files
 

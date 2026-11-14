@@ -56,17 +56,29 @@ mail for up to an hour after three requests (pre-existing behaviour, now durable
 
 ## 4. Account deletion and the Founders rate
 
-Deleting the original account permanently forfeits the rate. `closeFoundersAccount` runs before the destructive
-delete, under the per-account lock, in one transaction: eligibility → forfeited, enrollment → canceled, an
-`account_closed` audit entry, and the server-keyed HMAC e-mail signal indexed. Those rows have no foreign key to the profile and remain
-as the tombstone (account id, keyed e-mail signal, forfeiture, audit). A live subscription still blocks deletion. If Founders
-storage is configured but unavailable, nothing is deleted. If the delete itself then fails, the forfeiture stands and
-the user is told so. Re-registration with the same e-mail is refused admission (operator entry point
-`qualifyFoundersAccount` always supplies the hash).
+Deleting the ORIGINAL Founders account permanently forfeits the rate. `closeFoundersAccount` runs before the destructive
+delete, under the per-account lock (the same lock operator qualification takes), in one transaction.
 
-Open point for decision: forfeiture is recorded at the moment the user confirms deletion, even if the provider-side
-delete then fails and they keep the account. The alternative (forfeit only after a successful delete) leaves a crash
-window in which an account could be deleted without a tombstone.
+- **Accounts with no Founders eligibility or enrollment** (everyone else): nothing is written - no audit row, no
+  tombstone, no identity signal - and no identity key is needed. Deletion proceeds normally (data minimisation; the
+  `founders` schema never learns that the account existed). Outcome `no_founders_record`.
+- **Accounts with a Founders record:** eligibility -> forfeited, enrollment -> canceled, an `account_closed` audit
+  entry, and the server-keyed e-mail signal (`hmac-sha256:v1:`, key `FOUNDERS_IDENTITY_HMAC_KEY`, >= 32 bytes) are
+  recorded. These rows have no foreign key to the profile and remain as the minimal tombstone (account id, keyed
+  e-mail signal, forfeiture, audit). If the key is missing or short the transaction rolls back whole, the route answers
+  503 and **nothing is deleted** - this applies only to accounts that have a Founders record.
+- A live subscription still blocks deletion. If Founders storage is configured but unavailable, nothing is deleted.
+  If the provider-side delete then fails, the forfeiture stands and the user is told so. Re-registration with the same
+  e-mail is refused admission (operator entry `qualifyFoundersAccount` always supplies the keyed signal).
+- Race: a qualification racing the account's own deletion serializes on the lock; the account ends either deleted
+  with no record, or qualified-then-closed with a tombstone - never a qualified orphan (test D10).
+
+Key custody: the key must be provisioned before any Founders account is qualified, kept stable for the lifetime of
+retained tombstones, and never placed in source, chat or the bridge. Rotation needs an explicit re-keying migration.
+
+Open point for decision: forfeiture is recorded when the user confirms deletion, even if the provider-side delete then
+fails and they keep the account. The alternative (forfeit only after a successful delete) leaves a crash window in which
+a Founders account could be deleted without a tombstone.
 
 ## 5. Corrected test expectation (disclosed)
 

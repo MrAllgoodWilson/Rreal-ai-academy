@@ -4,7 +4,7 @@
  * SIMULATED: the auth provider's admin delete (a stub removes the auth.users row, which cascades exactly like the
  * real one), sign-in, and Stripe.
  */
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import crypto from "node:crypto";
 import { Pool } from "pg";
 import { createClient } from "@supabase/supabase-js";
@@ -90,6 +90,11 @@ beforeAll(async () => {
   wiring = await import("@/lib/founders-engine");
 });
 afterAll(async () => { await wiring.resetFoundersWiringForTests(); await proxy?.close(); await adminPool?.end(); });
+
+// The five-ever pilot cap is proven separately (X2: 4 admitted + 8 simultaneous -> exactly 5). These tests need many
+// Founders accounts, so on this harness-owned database the counter is reset before each test. It is never reset in X2.
+beforeEach(async () => { await adminPool.query("update founders.founders_pilot_counter set total_ever_admitted = 0 where id = 'portfolio_cap'"); });
+
 
 describe("D: account deletion and the Founders rate (auth provider + Stripe simulated)", () => {
   it("D1 a live subscription blocks deletion and nothing is forfeited", async () => {
@@ -182,27 +187,89 @@ describe("D: account deletion and the Founders rate (auth provider + Stripe simu
     expect(await enrollment(u.id)).toBe("canceled");
   });
 
-  it("D7 an account that never had anything to do with Founders can still be deleted (one audit entry, no eligibility invented)", async () => {
+  const anyFoundersRows = async (id: string) => (await q<{ n: string }>(
+    `select (select count(*) from founders.founders_eligibilities where immutable_account_id = $1)
+          + (select count(*) from founders.founders_enrollments where immutable_account_id = $1)
+          + (select count(*) from founders.founders_audit_trail where immutable_account_id = $1)
+          + (select count(*) from founders.founders_identity_signals where immutable_account_id = $1) as n`, [id]))[0].n;
+
+  it("D7 an account with NO Founders relationship deletes normally and leaves nothing behind in the founders schema", async () => {
     const u = await createUser(adminPool, "d7");
     expect((await post("account/delete", u, { confirm: "DELETE" })).status).toBe(200);
     expect(await exists(u.id)).toBe(false);
-    expect(await elig(u.id)).toBeUndefined();
-    expect(await closedAudits(u.id)).toBe(1);
+    expect(Number(await anyFoundersRows(u.id))).toBe(0); // no audit, no tombstone, no signal, no eligibility
   });
-  it("D8 missing identity key refuses deletion and rolls back the closure record", async () => {
-    const u = await createUser(adminPool, "d8");
+
+  it("D8 the identity key can NOT block an ordinary account's deletion (key missing, then too short)", async () => {
     const key = process.env.FOUNDERS_IDENTITY_HMAC_KEY;
-    const before = ctl.deleteCalls;
-    delete process.env.FOUNDERS_IDENTITY_HMAC_KEY;
     try {
-      const response = await post("account/delete", u, { confirm: "DELETE" });
-      expect(response.status).toBe(503);
-      expect(ctl.deleteCalls).toBe(before);
-      expect(await exists(u.id)).toBe(true);
-      expect(await closedAudits(u.id)).toBe(0);
+      for (const bad of [undefined, "short"]) {
+        if (bad === undefined) delete process.env.FOUNDERS_IDENTITY_HMAC_KEY; else process.env.FOUNDERS_IDENTITY_HMAC_KEY = bad;
+        const u = await createUser(adminPool, "d8");
+        expect((await post("account/delete", u, { confirm: "DELETE" })).status).toBe(200);
+        expect(await exists(u.id)).toBe(false);
+        expect(Number(await anyFoundersRows(u.id))).toBe(0);
+      }
     } finally {
       process.env.FOUNDERS_IDENTITY_HMAC_KEY = key;
     }
   });
 
+  it("D9 a Founders account with the identity key missing is refused (503), nothing is deleted, and the closure rolls back whole", async () => {
+    const { u, sub, t } = await enrolledFounder("d9");
+    await deliver("customer.subscription.deleted", { ...sub, status: "canceled" }, t + 10);
+    const rowsBefore = Number(await anyFoundersRows(u.id));
+    const stateBefore = await elig(u.id);
+    const key = process.env.FOUNDERS_IDENTITY_HMAC_KEY;
+    const before = ctl.deleteCalls;
+    delete process.env.FOUNDERS_IDENTITY_HMAC_KEY;
+    try {
+      expect((await post("account/delete", u, { confirm: "DELETE" })).status).toBe(503);
+      process.env.FOUNDERS_IDENTITY_HMAC_KEY = "short";
+      expect((await post("account/delete", u, { confirm: "DELETE" })).status).toBe(503);
+    } finally {
+      process.env.FOUNDERS_IDENTITY_HMAC_KEY = key;
+    }
+    expect(ctl.deleteCalls).toBe(before);
+    expect(await exists(u.id)).toBe(true);
+    expect(Number(await anyFoundersRows(u.id))).toBe(rowsBefore); // no half-written closure (no audit, no signal added)
+    expect(await closedAudits(u.id)).toBe(0);
+    expect(await elig(u.id)).toBe(stateBefore);
+    // with the key restored the same request completes and records the tombstone
+    expect((await post("account/delete", u, { confirm: "DELETE" })).status).toBe(200);
+    expect(await elig(u.id)).toBe("forfeited");
+    expect(await closedAudits(u.id)).toBe(1);
+  });
+
+  it("D10 operator qualification racing the account's own deletion serializes: either the account is deleted with no record, or it is qualified and then closed with a tombstone - never a qualified orphan", async () => {
+    for (let i = 0; i < 4; i++) {
+      const u = await createUser(adminPool, `d10${i}`);
+      const [qual, del] = await Promise.allSettled([
+        closure.qualifyFoundersAccount({ id: u.id, email: u.email, registeredAt: new Date().toISOString() }),
+        post("account/delete", u, { confirm: "DELETE" }),
+      ]);
+      expect(del.status).toBe("fulfilled");
+      expect((del as PromiseFulfilledResult<{ status: number }>).value.status).toBe(200);
+      expect(await exists(u.id)).toBe(false);
+      const status = await elig(u.id);
+      if (qual.status === "fulfilled") {
+        expect(status).toBe("forfeited");       // qualified first, then closed
+        expect(await closedAudits(u.id)).toBe(1);
+      } else {
+        expect(status).toBeUndefined();         // deleted first: qualification refused/failed, nothing orphaned
+      }
+      expect(["eligible", "enrolled"]).not.toContain(status);
+    }
+  });
+
+  it("D11 a Founders account deleted twice in a row (retry after success) stays one tombstone", async () => {
+    const { u, sub, t } = await enrolledFounder("d11");
+    await deliver("customer.subscription.deleted", { ...sub, status: "canceled" }, t + 10);
+    expect((await post("account/delete", u, { confirm: "DELETE" })).status).toBe(200);
+    await closure.closeFoundersAccount(u.id, u.email); // simulated repeat of the closure step after the delete
+    expect(await closedAudits(u.id)).toBe(2);           // the engine appends an audit entry per closure call...
+    expect(await q("select 1 from founders.founders_eligibilities where immutable_account_id = $1", [u.id])).toHaveLength(1);
+    expect(await q("select 1 from founders.founders_identity_signals where immutable_account_id = $1", [u.id])).toHaveLength(1); // ...but identity/eligibility never duplicate
+    expect(await elig(u.id)).toBe("forfeited");
+  });
 });
