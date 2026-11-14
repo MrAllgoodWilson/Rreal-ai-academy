@@ -8,20 +8,6 @@ import "server-only";
 
 type AiBinding = { run: (model: string, input: Record<string, unknown>, options?: Record<string, unknown>) => Promise<unknown> };
 
-export const ALLOWED_WORKERS_AI_MODELS: Record<string, string> = {
-  "@cf/meta/llama-3.2-3b-instruct": "llama-3.2-3b",
-};
-
-export const CF_TEXT_MODEL = () => {
-  const envModel = process.env.WORKERS_AI_MODEL;
-  if (envModel) {
-    if (!ALLOWED_WORKERS_AI_MODELS[envModel]) {
-      throw new Error(`WORKERS_AI_MODEL '${envModel}' is not in the approved Founders Beta model allow-list`);
-    }
-    return envModel;
-  }
-  return "@cf/meta/llama-3.2-3b-instruct";
-};
 export const CF_TTS_MODEL = "@cf/myshell-ai/melotts";
 
 export async function getAi(): Promise<AiBinding | null> {
@@ -64,53 +50,21 @@ export function extractUsage(out: unknown): { promptTokens?: number; completionT
   return undefined;
 }
 
-export interface CfTextResult {
+export interface CfManagedResult {
   text: string | null;
   usage?: { promptTokens?: number; completionTokens?: number };
-  modelUsed: string;
 }
 
-export async function cfTextWithDetails(opts: { system: string; messages: Msg[]; maxTokens?: number }): Promise<CfTextResult> {
+/**
+ * Exactly ONE Workers AI dispatch of the given model: no gateway, no alternate model, no retry.
+ * Only src/lib/claude.ts may call this, inside a cost reservation. Errors propagate so the caller keeps the
+ * reservation held (a thrown call may still have been billed).
+ */
+export async function cfManagedText(model: string, opts: { system: string; messages: Msg[]; maxTokens: number }): Promise<CfManagedResult> {
   const ai = await getAi();
-  if (!ai) return { text: null, modelUsed: "llama-3.2-3b" };
-  const maxTokens = opts.maxTokens ?? 700;
-
-  // Optional: real Claude through AI Gateway Unified Billing (credits loaded in the Cloudflare dashboard, no Anthropic key).
-  const gateway = process.env.AI_GATEWAY_ID;
-  const gatewayModel = process.env.AI_GATEWAY_MODEL;
-  if (gateway && gatewayModel) {
-    try {
-      const out = await ai.run(gatewayModel, { system: opts.system, messages: opts.messages, max_tokens: maxTokens }, { gateway: { id: gateway } });
-      const text = extractText(out);
-      if (text) {
-        return {
-          text,
-          usage: extractUsage(out),
-          modelUsed: gatewayModel,
-        };
-      }
-    } catch (e) {
-      console.error("AI Gateway model failed, falling back to Workers AI", gatewayModel, e);
-    }
-  }
-
-  const model = CF_TEXT_MODEL();
-  try {
-    const out = await ai.run(model, { messages: [{ role: "system", content: opts.system }, ...opts.messages], max_tokens: maxTokens });
-    return {
-      text: extractText(out),
-      usage: extractUsage(out),
-      modelUsed: "llama-3.2-3b",
-    };
-  } catch (e) {
-    console.error("Workers AI text error", e);
-    return { text: null, modelUsed: "llama-3.2-3b" };
-  }
-}
-
-export async function cfText(opts: { system: string; messages: Msg[]; maxTokens?: number }): Promise<string | null> {
-  const res = await cfTextWithDetails(opts);
-  return res.text;
+  if (!ai) throw new Error("Workers AI binding is not available");
+  const out = await ai.run(model, { messages: [{ role: "system", content: opts.system }, ...opts.messages], max_tokens: opts.maxTokens });
+  return { text: extractText(out), usage: extractUsage(out) };
 }
 
 async function toBytes(out: unknown): Promise<Uint8Array | null> {

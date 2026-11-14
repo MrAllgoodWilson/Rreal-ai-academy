@@ -65,7 +65,7 @@ export function userClient(restUrl: string, user: { id: string; email: string })
 export async function createUser(pool: Pool, tag: string): Promise<{ id: string; email: string }> {
   const r = crypto.randomBytes(5).toString("hex");
   const email = `${tag}-${r}@pgint.test`;
-  const { rows } = await pool.query("insert into auth.users(email, raw_user_meta_data) values ($1, $2) returning id", [email, { username: `${tag}${r}` }]);
+  const { rows } = await pool.query("insert into auth.users(email, raw_user_meta_data) values ($1, $2) returning id", [email, { username: `${tag.replace(/[^a-z0-9]/g, "")}${r}` }]);
   return { id: rows[0].id as string, email };
 }
 

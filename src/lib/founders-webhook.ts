@@ -1,7 +1,7 @@
 import "server-only";
 import { COMPANY_PILOT_CONFIG } from "@/lib/founders/company-inventory";
 import type { WebhookEventPayload } from "@/lib/founders/types";
-import { getDefaultFoundersRulesEngine, getFoundersStore } from "@/lib/founders-engine";
+import { getDefaultFoundersRulesEngine, getFoundersPool, getFoundersStore } from "@/lib/founders-engine";
 
 /**
  * Adapter between a signature-verified Stripe subscription and the account-bound Founders rules engine.
@@ -106,7 +106,22 @@ export async function applyFoundersSubscription(input: {
     },
   };
 
-  const result = await getDefaultFoundersRulesEngine().processSubscriptionWebhook(FOUNDERS_COMPANY, payload);
-  const enrollment = await getFoundersStore().getEnrollment(FOUNDERS_COMPANY, input.accountId);
-  return { outcome: result.status, mirror: !!enrollment && enrollment.providerSubscriptionId === sub.id };
+  // The engine reads then writes account state without row locks, so events for the same account are serialized
+  // here across all processes with a session-level advisory lock (released automatically if this process dies).
+  // Requires a direct or session-pooled connection; a transaction-pooled one would not hold the lock.
+  const lockKey = `founders:${FOUNDERS_COMPANY}:${input.accountId}`;
+  const lock = await getFoundersPool().connect();
+  try {
+    await lock.query("select pg_advisory_lock(hashtextextended($1, 0))", [lockKey]);
+    const result = await getDefaultFoundersRulesEngine().processSubscriptionWebhook(FOUNDERS_COMPANY, payload);
+    const enrollment = await getFoundersStore().getEnrollment(FOUNDERS_COMPANY, input.accountId);
+    return { outcome: result.status, mirror: !!enrollment && enrollment.providerSubscriptionId === sub.id };
+  } finally {
+    try {
+      await lock.query("select pg_advisory_unlock(hashtextextended($1, 0))", [lockKey]);
+      lock.release();
+    } catch {
+      lock.release(true); // drop the connection: its session lock dies with it
+    }
+  }
 }

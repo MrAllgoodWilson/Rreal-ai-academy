@@ -1,209 +1,161 @@
 import "server-only";
-import { cfText, cfTextWithDetails } from "@/lib/cf-ai";
+import { cfManagedText } from "@/lib/cf-ai";
 import type { Byok } from "@/lib/byok-server";
-import {
-  CostMeteringManager,
-  dispatchWithCostMetering,
-  MemoryFoundersCostStore,
-  CompanyId,
-} from "@/lib/founders";
+import { COMPANY_COST_BUDGETS, CostMeteringManager, dispatchWithCostMetering, HARD_REQUEST_LIMITS } from "@/lib/founders/cost-metering";
+import { getDefaultFoundersRulesEngine, getFoundersCostStore } from "@/lib/founders-engine";
 
-let defaultManager: CostMeteringManager | null = null;
+/**
+ * Text generation with two strictly separate funding modes:
+ *
+ *  - "byok": the member's own provider key pays. The Academy meter is not involved and an owner-funded failure
+ *    NEVER falls back to an Academy-funded model.
+ *  - "managed": the Academy pays, so every call is (1) restricted to the one approved model below, (2) allowed only
+ *    for an account with an active Founders entitlement, (3) reserved in the durable SQL ledger for its MAXIMUM
+ *    possible cost before dispatch, and (4) settled from provider-reported usage. If the provider omits usage, or the
+ *    call fails/times out after dispatch, the reservation stays held (money, unit and concurrency) for reconciliation.
+ *
+ * There is no third mode and no exported way to reach a provider without choosing one.
+ */
+export const MANAGED_COMPANY = "rreal" as const;
 
-function createDefaultStore() {
-  const dbUrl = process.env.DATABASE_URL || process.env.TEST_DATABASE_URL;
-  if (!dbUrl) {
-    throw new Error("Durable PostgresFoundersCostStore requires DATABASE_URL or TEST_DATABASE_URL. In-memory fallback is prohibited.");
-  }
-  try {
-    const { Pool } = require("pg");
-    const { PostgresFoundersCostStore } = require("./founders");
-    return new PostgresFoundersCostStore(new Pool({ connectionString: dbUrl }));
-  } catch (err) {
-    throw new Error("Failed to initialize durable PostgresFoundersCostStore: " + (err as Error).message);
-  }
-}
+/** The ONE binding of executed model -> price key -> provider. Changing the model means changing the price here. */
+export const MANAGED_TEXT_MODEL = {
+  provider: "cloudflare-workers-ai",
+  workersAiModel: "@cf/meta/llama-3.2-3b-instruct",
+  priceKey: "llama-3.2-3b",
+} as const;
 
-export function getDefaultCostMeteringManager(): CostMeteringManager {
-  if (!defaultManager) {
-    defaultManager = new CostMeteringManager(createDefaultStore());
-  }
-  return defaultManager;
-}
-
-export function setDefaultCostMeteringManager(manager: CostMeteringManager | null): void {
-  defaultManager = manager;
-}
+export type AiFunding = { kind: "byok"; byok: Byok } | { kind: "managed"; accountId: string };
 
 export interface ClaudeCallOptions {
   system: string;
   messages: { role: "user" | "assistant"; content: string }[];
   maxTokens?: number;
-  byok?: Byok;
-  metering?: {
-    accountId: string;
-    companyId?: CompanyId;
-    modelKey?: string;
-    meterManager?: CostMeteringManager;
-  };
+  funding: AiFunding;
 }
 
-export interface ProviderCallDetails {
-  result: string | null;
-  actualInputTokens?: number;
-  actualOutputTokens?: number;
-  modelUsed: string;
+export class ManagedAiDeniedError extends Error {
+  constructor(public readonly reason: string) {
+    super(`managed AI denied: ${reason}`);
+    this.name = "ManagedAiDeniedError";
+  }
+}
+/** Thrown AFTER dispatch when the provider gave no usable usage report. The reservation is deliberately left held. */
+export class ManagedUsageMissingError extends Error {
+  constructor() {
+    super("provider response omitted token usage; reservation held for reconciliation");
+    this.name = "ManagedUsageMissingError";
+  }
 }
 
-/** Internal provider execution logic with actual usage extraction */
-export async function executeProviderCallWithDetails(opts: {
-  system: string;
-  messages: { role: "user" | "assistant"; content: string }[];
-  maxTokens?: number;
-  byok?: Byok;
-}): Promise<ProviderCallDetails> {
-  if (opts.byok?.openai && !opts.byok.anthropic) {
-    return callOpenAIWithDetails(opts.byok.openai, opts);
-  }
-
-  const key = opts.byok?.anthropic || process.env.ANTHROPIC_API_KEY;
-  if (!key) {
-    const cf = await cfTextWithDetails(opts);
-    return {
-      result: cf.text,
-      actualInputTokens: cf.usage?.promptTokens,
-      actualOutputTokens: cf.usage?.completionTokens,
-      modelUsed: cf.modelUsed,
-    };
-  }
-
-  const own = Boolean(opts.byok?.anthropic);
-  const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({
-      model,
-      max_tokens: opts.maxTokens ?? 700,
-      system: opts.system,
-      messages: opts.messages,
-    }),
-  });
-
-  if (!res.ok) {
-    console.error("Claude API error", res.status);
-    if (own) return { result: null, modelUsed: model };
-    const cf = await cfTextWithDetails(opts);
-    return {
-      result: cf.text,
-      actualInputTokens: cf.usage?.promptTokens,
-      actualOutputTokens: cf.usage?.completionTokens,
-      modelUsed: cf.modelUsed,
-    };
-  }
-
-  const json = (await res.json()) as {
-    content?: { type: string; text?: string }[];
-    usage?: { input_tokens?: number; output_tokens?: number };
-  };
-
-  const text = json.content?.filter((c) => c.type === "text").map((c) => c.text).join("\n").trim() || null;
-  return {
-    result: text,
-    actualInputTokens: json.usage?.input_tokens,
-    actualOutputTokens: json.usage?.output_tokens,
-    modelUsed: model,
-  };
+let manager: CostMeteringManager | null = null;
+export function getDefaultCostMeteringManager(): CostMeteringManager {
+  // Durable Postgres ledger only; getFoundersCostStore() throws when storage isn't configured.
+  if (!manager) manager = new CostMeteringManager(getFoundersCostStore());
+  return manager;
+}
+/** Test seam: inject a manager built on a harness database. Never used by app code. */
+export function setDefaultCostMeteringManager(next: CostMeteringManager | null): void {
+  manager = next;
 }
 
-/** Legacy wrapper maintaining string | null contract */
-export async function executeProviderCall(opts: {
-  system: string;
-  messages: { role: "user" | "assistant"; content: string }[];
-  maxTokens?: number;
-  byok?: Byok;
-}): Promise<string | null> {
-  const details = await executeProviderCallWithDetails(opts);
-  return details.result;
+const bytes = (s: string | undefined) => Buffer.byteLength(s ?? "", "utf8");
+
+/**
+ * Upper bound on prompt tokens without a tokenizer: a token never spans less than one byte, plus a fixed allowance for
+ * the chat template around each message. Deliberately conservative: this is a bound, not an estimate.
+ */
+export function promptTokenUpperBound(system: string, messages: { content: string }[]): number {
+  return bytes(system) + 16 + messages.reduce((n, m) => n + bytes(m.content) + 16, 0) + 32;
 }
 
-/** OpenAI Chat Completions with member's own key */
-async function callOpenAIWithDetails(
-  key: string,
-  opts: { system: string; messages: { role: "user" | "assistant"; content: string }[]; maxTokens?: number }
-): Promise<ProviderCallDetails> {
-  const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      model,
-      max_tokens: opts.maxTokens ?? 700,
-      messages: [{ role: "system", content: opts.system }, ...opts.messages],
-    }),
-  });
-
-  if (!res.ok) {
-    console.error("OpenAI API error", res.status);
-    return { result: null, modelUsed: model };
+/** Resolves the approved managed model, rejecting any override or price-table drift BEFORE anything is dispatched. */
+export function resolveManagedModel(env: Readonly<Record<string, string | undefined>> = process.env) {
+  const override = env.WORKERS_AI_MODEL;
+  if (override && override !== MANAGED_TEXT_MODEL.workersAiModel) {
+    throw new ManagedAiDeniedError("WORKERS_AI_MODEL is not the approved managed model");
   }
+  if (env.AI_GATEWAY_MODEL) {
+    // A gateway model would execute (and bill) something other than the priced model.
+    throw new ManagedAiDeniedError("AI_GATEWAY_MODEL is not permitted for managed execution");
+  }
+  const price = COMPANY_COST_BUDGETS[MANAGED_COMPANY].supportedModels[MANAGED_TEXT_MODEL.priceKey];
+  if (!price || price.provider !== MANAGED_TEXT_MODEL.provider || !MANAGED_TEXT_MODEL.workersAiModel.endsWith(`/${price.model}`)) {
+    throw new ManagedAiDeniedError("managed model has no matching price entry");
+  }
+  return MANAGED_TEXT_MODEL;
+}
 
-  const json = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-    usage?: { prompt_tokens?: number; completion_tokens?: number };
-  };
+async function callManaged(opts: ClaudeCallOptions, accountId: string): Promise<string | null> {
+  const model = resolveManagedModel();
+  const maxOutput = Math.min(Math.max(1, Math.floor(opts.maxTokens ?? 700)), HARD_REQUEST_LIMITS.maxCompletionTokens);
+  const maxInput = promptTokenUpperBound(opts.system, opts.messages);
+  if (opts.messages.length > HARD_REQUEST_LIMITS.maxTurns * 2) throw new ManagedAiDeniedError("too many turns");
 
-  const text = json.choices?.[0]?.message?.content?.trim() || null;
-  return {
-    result: text,
-    actualInputTokens: json.usage?.prompt_tokens,
-    actualOutputTokens: json.usage?.completion_tokens,
-    modelUsed: model,
-  };
+  // Entitlement first: no reservation and no dispatch for an account without an active Founders entitlement.
+  const entitlement = await getDefaultFoundersRulesEngine().checkEntitlement(MANAGED_COMPANY, accountId);
+  if (!entitlement.hasActiveEntitlement) throw new ManagedAiDeniedError("no active Founders entitlement");
+
+  // Reserve the maximum this single dispatch can cost (one call, no retry, no fan-out), then dispatch exactly once.
+  return dispatchWithCostMetering(
+    getDefaultCostMeteringManager(), MANAGED_COMPANY, accountId, model.priceKey, maxInput, maxOutput, 1,
+    async () => {
+      const out = await cfManagedText(model.workersAiModel, { system: opts.system, messages: opts.messages, maxTokens: maxOutput });
+      const input = out.usage?.promptTokens;
+      const output = out.usage?.completionTokens;
+      if (!Number.isInteger(input) || !Number.isInteger(output) || (input as number) < 0 || (output as number) < 0) {
+        throw new ManagedUsageMissingError();
+      }
+      return { result: out.text, actualInputTokens: input as number, actualOutputTokens: output as number };
+    },
+  );
+}
+
+/** Member-funded call. Returns null on any provider failure; never touches an Academy-funded model. */
+async function callOwnerFunded(opts: ClaudeCallOptions, byok: Byok): Promise<string | null> {
+  const body = { max_tokens: opts.maxTokens ?? 700 };
+  if (byok.anthropic) {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": byok.anthropic, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({ ...body, model: process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5", system: opts.system, messages: opts.messages }),
+    });
+    if (!res.ok) { console.error("Claude API error", res.status); return null; }
+    const json = (await res.json()) as { content?: { type: string; text?: string }[] };
+    return json.content?.filter((c) => c.type === "text").map((c) => c.text).join("\n").trim() || null;
+  }
+  if (byok.openai) {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { authorization: `Bearer ${byok.openai}`, "content-type": "application/json" },
+      body: JSON.stringify({ ...body, model: process.env.OPENAI_MODEL || "gpt-4.1-mini", messages: [{ role: "system", content: opts.system }, ...opts.messages] }),
+    });
+    if (!res.ok) { console.error("OpenAI API error", res.status); return null; }
+    const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    return json.choices?.[0]?.message?.content?.trim() || null;
+  }
+  return null;
 }
 
 /**
- * Text generation with integrated Directive P2 cost metering & spending envelope enforcement.
- * When metering is requested, guarantees that denied reservations make ZERO provider calls,
- * and that provider timeouts strictly retain reservations to prevent double-spending in-flight compute.
+ * The only entry point for text generation. Returns null when no text is available so callers can degrade to their
+ * offline engine. A managed denial makes zero provider calls; a managed failure after dispatch leaves the
+ * reservation held and is logged by class name only.
  */
 export async function callClaude(opts: ClaudeCallOptions): Promise<string | null> {
-  if (!opts.metering && !opts.byok) {
-    throw new Error("callClaude requires mandatory metering context for all managed provider calls");
+  const funding = opts.funding;
+  if (!funding || (funding.kind !== "byok" && funding.kind !== "managed")) {
+    throw new Error("callClaude requires an explicit funding mode");
   }
-
-  if (opts.metering) {
-    const manager = opts.metering.meterManager ?? getDefaultCostMeteringManager();
-    const promptLen = opts.messages.reduce((acc, m) => acc + (m.content?.length || 0), 0) + (opts.system?.length || 0);
-    const estimatedPromptTokens = Math.max(1, Math.ceil(promptLen / 4));
-    const estimatedCompletionTokens = opts.maxTokens ?? 700;
-    const companyId = opts.metering.companyId || "rreal";
-
-    // Align billed model with actual execution path:
-    // BYOK users pay their own provider; managed Founders Beta uses llama-3.2-3b
-    const modelKey = opts.metering.modelKey || "llama-3.2-3b";
-
-    return await dispatchWithCostMetering(
-      manager,
-      companyId,
-      opts.metering.accountId,
-      modelKey,
-      estimatedPromptTokens,
-      estimatedCompletionTokens,
-      1,
-      async () => {
-        const details = await executeProviderCallWithDetails(opts);
-        if (typeof details.actualInputTokens !== "number" || typeof details.actualOutputTokens !== "number") {
-          throw new Error("Provider response omitted required token usage metrics; reservation retained on hold for reconciliation");
-        }
-        return {
-          result: details.result,
-          actualInputTokens: details.actualInputTokens,
-          actualOutputTokens: details.actualOutputTokens,
-        };
-      },
-    );
+  if (funding.kind === "byok") {
+    if (!funding.byok?.anthropic && !funding.byok?.openai) throw new Error("callClaude: byok funding without a member key");
+    return callOwnerFunded(opts, funding.byok);
   }
-
-  throw new Error("callClaude requires mandatory metering context for all provider calls");
+  if (typeof funding.accountId !== "string" || !funding.accountId) throw new Error("callClaude: managed funding without an account");
+  try {
+    return await callManaged(opts, funding.accountId);
+  } catch (e) {
+    console.error("Managed AI call not completed:", e instanceof Error ? e.name : "unknown");
+    return null;
+  }
 }

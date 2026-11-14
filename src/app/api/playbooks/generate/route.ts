@@ -4,7 +4,8 @@ import { z } from "zod";
 import { callClaude } from "@/lib/claude";
 import { PLAYBOOK_SYSTEM_PROMPT, PlaybookSchema } from "@/lib/playbook-schema";
 import { getMember } from "@/lib/server-auth";
-import { readByok, ownsTextAi } from "@/lib/byok-server";
+import { readByok } from "@/lib/byok-server";
+import { resolveAiFunding } from "@/lib/ai-funding";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 export const maxDuration = 90;
@@ -17,14 +18,14 @@ export async function POST(req: Request) {
   const who = await getMember({ requireSubscription: true });
   if ("error" in who) return who.error;
   const byok = readByok(req);
-  if (who.demo || !ownsTextAi(byok)) return unfundedExecution("playbook");
+  const funding = who.demo ? null : await resolveAiFunding(byok, who.member.user.id, "playbook");
+  if (!funding) return unfundedExecution("playbook");
 
   const raw = await callClaude({
     system: PLAYBOOK_SYSTEM_PROMPT,
     messages: [{ role: "user", content: `I want to create: """${parsed.data.request}"""\nWrite it in ${parsed.data.language === "es" ? "Latin American Spanish" : "English"}.` }],
     maxTokens: 4000,
-    byok,
-    metering: { accountId: (who as any).member?.user?.id || (who as any).user?.id || "member", companyId: "rreal" },
+    funding,
   }).catch(() => null);
   if (!raw) return NextResponse.json({ error: "Couldn't build that playbook right now. Try again." }, { status: 502 });
   try {

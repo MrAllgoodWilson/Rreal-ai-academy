@@ -147,4 +147,38 @@ CREATE TABLE IF NOT EXISTS founders_audit_trail (
 CREATE OR REPLACE RULE no_update_audit AS ON UPDATE TO founders_audit_trail DO INSTEAD NOTHING;
 CREATE OR REPLACE RULE no_delete_audit AS ON DELETE TO founders_audit_trail DO INSTEAD NOTHING;
 
+
+-- ── App-level additions (NOT part of the library schema above) ─────────────────────────────────────────────
+-- The library reads state and writes it back inside a READ COMMITTED transaction without locking the rows, so two
+-- events for the same account processed at the same instant can overwrite each other (observed: a renewal that
+-- read "active" before a cancellation committed wrote "active" back over "canceled").
+-- These guards make the terminal states terminal in the database itself. A violating write raises, the engine
+-- transaction rolls back, the webhook answers 500 and the provider retry then sees the committed terminal state.
+CREATE OR REPLACE FUNCTION guard_enrollment_terminal() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.subscription_status = 'canceled' AND NEW.subscription_status <> 'canceled'
+     AND NEW.provider_subscription_id = OLD.provider_subscription_id THEN
+    RAISE EXCEPTION 'founders: a canceled enrollment cannot be reactivated' USING ERRCODE = 'P0001';
+  END IF;
+  IF NEW.provider_subscription_id = OLD.provider_subscription_id
+     AND COALESCE(NEW.last_event_created, 0) < COALESCE(OLD.last_event_created, 0) THEN
+    RAISE EXCEPTION 'founders: enrollment event clock cannot move backwards' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_guard_enrollment_terminal ON founders_enrollments;
+CREATE TRIGGER trg_guard_enrollment_terminal BEFORE UPDATE ON founders_enrollments
+  FOR EACH ROW EXECUTE FUNCTION guard_enrollment_terminal();
+
+CREATE OR REPLACE FUNCTION guard_eligibility_terminal() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.eligibility_status IN ('forfeited', 'revoked') AND NEW.eligibility_status NOT IN ('forfeited', 'revoked') THEN
+    RAISE EXCEPTION 'founders: a forfeited eligibility cannot be restored' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_guard_eligibility_terminal ON founders_eligibilities;
+CREATE TRIGGER trg_guard_eligibility_terminal BEFORE UPDATE ON founders_eligibilities
+  FOR EACH ROW EXECUTE FUNCTION guard_eligibility_terminal();
+
 reset search_path;

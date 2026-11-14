@@ -3,8 +3,9 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { callClaude } from "@/lib/claude";
 import { COURSE_SYSTEM_PROMPT, CATEGORIES, GeneratedCourseSchema, toTrack } from "@/lib/course-schema";
-import { getMember, takeQuota, spendCredit, refundCredit } from "@/lib/server-auth";
-import { readByok, ownsTextAi } from "@/lib/byok-server";
+import { getMember, takeQuota } from "@/lib/server-auth";
+import { readByok } from "@/lib/byok-server";
+import { resolveAiFunding } from "@/lib/ai-funding";
 import { dispatchPluginEvent } from "@/lib/plugins/dispatch";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import type { Category, TrackLevel } from "@/lib/curriculum/types";
@@ -29,31 +30,28 @@ export async function POST(req: Request) {
   if ("error" in who) return who.error;
   // Members who connect their own Claude/ChatGPT account build courses free; otherwise a $9.99 course credit is used.
   const byok = readByok(req);
-  let charged = false;
-  const spendRef = `course:${randomBytes(8).toString("hex")}`;
+  // Course generation needs far more output than the approved managed-model request limits allow, so it runs only
+  // on the member's own AI account. Nothing is charged (quota or credit) when it cannot run.
+  const funding = who.demo ? null : await resolveAiFunding(byok, who.member.user.id, "course");
+  if (!funding) {
+    return NextResponse.json({ error: "Creating your own course currently needs your own AI account connected in Settings. No credit was used.", code: "own_ai_required", kind: "course" }, { status: 503 });
+  }
   if (!who.demo) {
     const limited = await takeQuota(who.member, "course");
     if (limited) return limited;
-    if (!ownsTextAi(byok)) {
-      charged = await spendCredit(who.member, "course", spendRef);
-      if (!charged) return NextResponse.json({ error: "Creating your own course costs $9.99. Buy a course credit to continue.", code: "credits_required", kind: "course" }, { status: 402 });
-    }
   }
-  const refund = async () => {
-    if (!who.demo && charged) await refundCredit(((who as any).member?.user?.id || (who as any).user?.id || "member"), "course", spendRef);
-  };
+  const refund = async () => undefined;
 
   const levelName = ["", "absolute beginner (dummy)", "beginner", "intermediate", "advanced", "expert"][level];
   const raw = await callClaude({
     system: COURSE_SYSTEM_PROMPT,
     messages: [{ role: "user", content: `Learner request: """${request}"""\nLevel: ${levelName}\nWrite the entire course in ${language === "es" ? "Latin American Spanish" : "English"}.` }],
     maxTokens: 8000,
-    byok,
-    metering: { accountId: ((who as any).member?.user?.id || (who as any).user?.id || "member"), companyId: "rreal" },
+    funding,
   }).catch(() => null);
   if (!raw) {
     await refund();
-    return NextResponse.json({ error: "The AI couldn't build that course right now. Your credit was returned — please try again." }, { status: 502 });
+    return NextResponse.json({ error: "The AI couldn't build that course right now. Please try again." }, { status: 502 });
   }
 
   let json: unknown;
@@ -61,7 +59,7 @@ export async function POST(req: Request) {
     json = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
   } catch {
     await refund();
-    return NextResponse.json({ error: "The AI returned an unreadable course. Your credit was returned — please try again." }, { status: 502 });
+    return NextResponse.json({ error: "The AI returned an unreadable course. Please try again." }, { status: 502 });
   }
   const course = GeneratedCourseSchema.safeParse(json);
   if (!course.success) {
@@ -76,9 +74,9 @@ export async function POST(req: Request) {
     const { error } = await who.member.sb.rpc("create_custom_course", { p_course: track, p_request: request });
     if (error) {
       await refund();
-      return NextResponse.json({ error: "Couldn't save your course. Your credit was returned — please try again." }, { status: 500 });
+      return NextResponse.json({ error: "Couldn't save your course. Please try again." }, { status: 500 });
     }
-    dispatchPluginEvent(who.member.sb, ((who as any).member?.user?.id || (who as any).user?.id || "member"), "course.created", { title: track.name, id: track.id });
+    dispatchPluginEvent(who.member.sb, who.member.user.id, "course.created", { title: track.name, id: track.id });
   }
   return NextResponse.json({ track });
 }
