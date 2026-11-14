@@ -6,10 +6,10 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { FormAlert } from "@/components/AuthCard";
 
 const TIERS = [
-  { id: "community", icon: Megaphone, name: "Community sponsor", desc: "Your logo on our Sponsors page and in the monthly member newsletter. Great for local businesses and creators." },
-  { id: "course", icon: Sparkles, name: "Course sponsor", desc: "\"Presented by\" placement on one course or playbook that fits your brand, plus a featured resource inside its lessons." },
-  { id: "tool-partner", icon: Wrench, name: "Tool partner", desc: "Get featured in our step-by-step Playbooks where learners pick the tools they need, with your partner or affiliate link." },
-  { id: "title", icon: Handshake, name: "Title partner", desc: "Co-branded certificates, a dedicated learning path, scholarships for your community, and quarterly impact reports." },
+  { id: "community", icon: Megaphone, name: "Community sponsor", desc: "Proposed placement on our public Sponsors page. Any newsletter placement requires a separately agreed, consented audience and delivery plan." },
+  { id: "course", icon: Sparkles, name: "Public preview sponsor", desc: "Proposed sponsorship of an eligible public course preview or resource page. Paid lessons and member workspaces stay ad-free." },
+  { id: "tool-partner", icon: Wrench, name: "Tool partner", desc: "Proposed placement in our public partner resources. Tracking links require program approval and clear sponsorship or affiliate disclosure." },
+  { id: "title", icon: Handshake, name: "Title partner", desc: "A proposed public sponsorship package with placement, dates, rights and reporting agreed before payment. Private learning records and certificates are excluded." },
 ] as const;
 
 /** Public page where brands can sponsor the academy. */
