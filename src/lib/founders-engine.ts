@@ -13,6 +13,7 @@ import { PostgresFoundersStore, PostgresFoundersCostStore } from "@/lib/founders
 const SCHEMA_RE = /^[a-z_][a-z0-9_]{0,62}$/;
 
 let pool: Pool | null = null;
+let lockPool: Pool | null = null;
 let engine: AccountBoundRulesEngine | null = null;
 let store: PostgresFoundersStore | null = null;
 let costStore: PostgresFoundersCostStore | null = null;
@@ -65,10 +66,24 @@ export function getDefaultFoundersRulesEngine(): AccountBoundRulesEngine {
  * that account across all processes (the library reads then writes without row locks). The lock dies with the
  * connection, so a crashed process cannot leave it held. Needs a direct or session-pooled connection.
  */
+/**
+ * Lock waiters must not consume the data pool: callbacks use that pool for their transactions.
+ * Sharing it deadlocks when all slots hold locks while waiting for callback connections.
+ */
+function getFoundersLockPool(): Pool {
+  if (lockPool) return lockPool;
+  const url = process.env.FOUNDERS_DATABASE_URL || process.env.DATABASE_URL;
+  if (!url) throw new Error("Founders lock storage is not configured.");
+  lockPool = new Pool({ connectionString: url, max: 5, connectionTimeoutMillis: 5000 });
+  lockPool.on("error", () => undefined);
+  return lockPool;
+}
+
 export async function withFoundersAccountLock<T>(company: string, accountId: string, fn: () => Promise<T>): Promise<T> {
   const key = `founders:${company}:${accountId}`;
-  const lock = await getFoundersPool().connect();
+  const lock = await getFoundersLockPool().connect();
   try {
+    await lock.query("set lock_timeout = '5s'");
     await lock.query("select pg_advisory_lock(hashtextextended($1, 0))", [key]);
     return await fn();
   } finally {
@@ -89,6 +104,7 @@ export function setDefaultFoundersRulesEngine(next: AccountBoundRulesEngine | nu
 /** Test seam: drop cached pool/stores so a new process-level configuration is picked up. */
 export async function resetFoundersWiringForTests(): Promise<void> {
   const p = pool;
-  pool = null; engine = null; store = null; costStore = null;
-  if (p) await p.end().catch(() => undefined);
+  const locks = lockPool;
+  pool = null; lockPool = null; engine = null; store = null; costStore = null;
+  await Promise.all([p?.end().catch(() => undefined), locks?.end().catch(() => undefined)]);
 }

@@ -141,3 +141,11 @@ plain-SHA draft signals need explicit migration/requalification before activatio
 the new keyed format. No connected database or secret was changed during this recovery. Likewise edgeAddress trusts CF-Connecting-IP
 and X-Real-IP: deployment must ensure those values are overwritten by a trusted edge and direct origin bypass is
 unavailable. Local forged-header rejection is not proof of the intended hosted edge's behavior.
+
+## Lock-connection concurrency follow-up
+
+Account advisory locks now use a separate maximum-five connection pool, while transactions retain the existing
+five-connection data pool. This prevents same-process requests from exhausting all data connections with lock
+holders/waiters. Budget up to ten session connections per runtime instance, plus external client connections;
+verify the hosted connection budget before deployment. Acquisition has a five-second server lock timeout.
+The same-process saturation and serialization checks are in tests/account-lock.pgint.ts.
