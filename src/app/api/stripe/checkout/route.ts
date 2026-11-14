@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
+import { durableLimit } from "@/lib/durable-limit";
 import { resolveCheckoutPrice } from "@/lib/stripe-sandbox-guard";
 import { getSupabaseAdmin, getSupabaseServer } from "@/lib/supabase/server";
 import {
@@ -39,6 +40,12 @@ export async function POST(req: Request) {
   const { data: auth } = await sb.auth.getUser();
   if (!auth.user) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
   const userId = auth.user.id;
+  const limited = await durableLimit("checkout", userId, 10, 10 * 60_000);
+  if (limited !== "ok") {
+    return limited === "limited"
+      ? NextResponse.json({ error: "Too many checkout attempts. Please wait a few minutes." }, { status: 429 })
+      : NextResponse.json({ error: "Checkout is temporarily unavailable. Please try again shortly." }, { status: 503 });
+  }
 
   let body: CheckoutBody = {};
   try {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 import { emailLayout, sendEmail } from "@/lib/email";
 
 const Body = z.object({
@@ -18,7 +18,8 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 
 /** Public sponsor inquiry intake. Stored with the service role; the owner is emailed. */
 export async function POST(req: Request) {
-  if (!rateLimit(`sponsor:${clientIp(req)}`, 3, 60 * 60_000).ok) return NextResponse.json({ error: "Thanks! We already have your note. We'll be in touch soon." }, { status: 429 });
+  const lim1 = await durableLimit("sponsor", edgeAddress(req), 3, 60 * 60_000);
+  if (lim1 === "limited") return NextResponse.json({ error: "Thanks! We already have your note. We'll be in touch soon." }, { status: 429 }); // limiter outage: this public, unbilled route stays up
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Please fill in company, name, a valid email and a sponsorship type." }, { status: 400 });
   const d = parsed.data;

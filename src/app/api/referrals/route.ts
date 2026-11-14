@@ -4,7 +4,7 @@ import { z } from "zod";
 import QRCode from "qrcode";
 import { getMember } from "@/lib/server-auth";
 import { referralUrl, type ReferralDashboard } from "@/lib/referrals";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 
 export async function GET() {
   if (process.env.REFERRALS_ENABLED !== "true") return NextResponse.json({ error: "Referral launch is being prepared." }, { status: 503 });
@@ -26,7 +26,8 @@ export async function GET() {
 export async function POST(req: Request) {
   if (!sameOriginRequest(req)) return NextResponse.json({ error: "Forbidden origin." }, { status: 403 });
   if (process.env.REFERRALS_ENABLED !== "true") return NextResponse.json({ error: "Referral launch is being prepared." }, { status: 503 });
-  if (!rateLimit(`referral:${clientIp(req)}`, 10, 60_000).ok) return NextResponse.json({ error: "Try again later." }, { status: 429 });
+  const lim1 = await durableLimit("referral", edgeAddress(req), 10, 60_000);
+  if (lim1 !== "ok") return lim1 === "limited" ? NextResponse.json({ error: "Try again later." }, { status: 429 }) : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
   const parsed = z.discriminatedUnion("action", [
     z.object({ action: z.literal("attribute"), code: z.string().regex(/^[a-f0-9]{32}$/) }),
     z.object({ action: z.literal("acknowledge"), rewardId: z.string().uuid() }),

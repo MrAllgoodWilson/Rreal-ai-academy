@@ -3,12 +3,13 @@ import { z } from "zod";
 import { getMember, spendCredit, refundCredit } from "@/lib/server-auth";
 import { randomBytes } from "node:crypto";
 import { startVideo, videoConfigured } from "@/lib/video";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 import { readByok } from "@/lib/byok-server";
 
 /** Starts a real AI video render for a scene prompt. Poll GET /api/video/[id] for the result. */
 export async function POST(req: Request) {
-  if (!rateLimit(`vid:${clientIp(req)}`, 5, 60_000).ok) return NextResponse.json({ error: "Please wait a minute." }, { status: 429 });
+  const lim1 = await durableLimit("vid", edgeAddress(req), 5, 60_000);
+  if (lim1 !== "ok") return lim1 === "limited" ? NextResponse.json({ error: "Please wait a minute." }, { status: 429 }) : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
   const parsed = z.object({ prompt: z.string().trim().min(10).max(1500) }).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Describe the scene (at least a sentence)." }, { status: 400 });
   const own = readByok(req).replicate;

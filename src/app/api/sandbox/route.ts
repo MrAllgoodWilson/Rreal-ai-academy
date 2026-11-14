@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { callClaude } from "@/lib/claude";
 import { gradePrompt } from "@/lib/prompt-grader";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 import { getMember } from "@/lib/server-auth";
 import { readByok } from "@/lib/byok-server";
 import { resolveAiFunding } from "@/lib/ai-funding";
@@ -23,7 +23,8 @@ function simulate(prompt: string) {
 }
 
 export async function POST(req: Request) {
-  if (!rateLimit(`sandbox:${clientIp(req)}`, 20, 60_000).ok) return NextResponse.json({ error: "Rate limit reached. Try again in a minute." }, { status: 429 });
+  const lim1 = await durableLimit("sandbox", edgeAddress(req), 20, 60_000);
+  if (lim1 !== "ok") return lim1 === "limited" ? NextResponse.json({ error: "Rate limit reached. Try again in a minute." }, { status: 429 }) : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Please enter a prompt (max 8,000 characters)." }, { status: 400 });
   const { prompt, goal } = parsed.data;

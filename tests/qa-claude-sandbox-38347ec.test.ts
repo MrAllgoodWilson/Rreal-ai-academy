@@ -18,7 +18,7 @@ vi.mock("@/lib/stripe", () => ({
 vi.mock("@/lib/supabase/server", () => ({
   getSupabaseServer: async () => supabaseNull ? null : ({
     auth: { getUser: async () => ({ data: { user: { id: "11111111-1111-4111-8111-111111111111", email: "real@member.test" } } }) },
-    from: () => ({ select: () => ({ eq: () => ({ not: () => ({ limit: () => ({ maybeSingle: async () => ({ data: { stripe_customer_id: "cus_LIVE_existing" } }) }) }) }) }) }),
+    from: () => ({ select: () => ({ eq: async () => ({ data: [{ stripe_customer_id: "cus_LIVE_existing", status: "canceled" }], error: null }) }) }),
   }),
   getSupabaseAdmin: () => ({
     from: (t: string) => ({
@@ -27,7 +27,11 @@ vi.mock("@/lib/supabase/server", () => ({
       delete: () => ({ eq: async () => ({}) }),
       select: () => ({ eq: () => ({ limit: () => ({ maybeSingle: async () => ({ data: null }) }) }), or: () => ({ limit: () => ({ maybeSingle: async () => ({ data: null }) }) }) }),
     }),
-    rpc: async () => ({ error: null }),
+    // The shared checkout limiter (0013) requires an explicit boolean SQL response.
+    // Preserve the isolation assertions below; this fake models only the limiter contract.
+    rpc: async (name: string) => name === "rate_limit_hit"
+      ? ({ data: true, error: null })
+      : ({ data: null, error: null }),
   }),
 }));
 vi.mock("@/lib/referrals-server", () => ({ processReferralPaymentEvent: async () => {} }));

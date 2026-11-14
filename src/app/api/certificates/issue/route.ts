@@ -5,7 +5,7 @@ import { credentialCode, credentialTitle, fingerprint, signCertificate } from "@
 import { accreditationFor } from "@/lib/certificates/accreditation";
 import { getSupabaseAdmin, getSupabaseServer } from "@/lib/supabase/server";
 import { dispatchPluginEvent } from "@/lib/plugins/dispatch";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 
 const Body = z.object({
   trackId: z.string().max(100),
@@ -17,7 +17,8 @@ const Body = z.object({
 const EXAM_TRACKS = new Set(["architect", "master"]);
 
 export async function POST(req: Request) {
-  if (!rateLimit(`cert:${clientIp(req)}`, 10, 60_000).ok) return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
+  const lim1 = await durableLimit("cert", edgeAddress(req), 10, 60_000);
+  if (lim1 !== "ok") return lim1 === "limited" ? NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 }) : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   let { name, completedLessonIds, score } = parsed.data;

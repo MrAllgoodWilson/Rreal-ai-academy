@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getMember } from "@/lib/server-auth";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
+import { closeFoundersAccount } from "@/lib/founders-closure";
 
 /**
  * Permanently deletes the signed-in member's account and learning data (profile, progress, certificates, credits, private courses).
@@ -12,7 +13,8 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
  *  - courses the member published for everyone are handed to the academy admin so other learners don't lose them or their progress.
  */
 export async function POST(req: Request) {
-  if (!rateLimit(`acct-del:${clientIp(req)}`, 5, 60 * 60_000).ok) return NextResponse.json({ error: "Please try again later." }, { status: 429 });
+  const lim1 = await durableLimit("acct-del", edgeAddress(req), 5, 60 * 60_000);
+  if (lim1 !== "ok") return lim1 === "limited" ? NextResponse.json({ error: "Please try again later." }, { status: 429 }) : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
   const parsed = z.object({ confirm: z.literal("DELETE") }).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Type DELETE to confirm." }, { status: 400 });
   const who = await getMember();
@@ -24,7 +26,7 @@ export async function POST(req: Request) {
 
   // Fail closed: if a safety lookup errors, delete nothing (otherwise a DB/RLS hiccup could bypass the billing or course safeguards).
   const unavailable = () => NextResponse.json({ error: "We couldn't verify your account just now, so nothing was deleted. Please try again in a minute or email support@rrealaiacademy.app." }, { status: 503 });
-  const { data: live, error: subErr } = await sb.from("subscriptions").select("status").eq("user_id", user.id).in("status", ["active", "trialing", "past_due"]).limit(1).maybeSingle();
+  const { data: live, error: subErr } = await sb.from("subscriptions").select("status").eq("user_id", user.id).in("status", ["active", "trialing", "past_due", "unpaid", "paused", "incomplete"]).limit(1).maybeSingle();
   if (subErr) return unavailable();
   if (live) return NextResponse.json({ error: "Please cancel your membership first (Settings → Plan & billing), or email support@rrealaiacademy.app and we'll cancel and delete for you.", code: "cancel_first" }, { status: 409 });
 
@@ -49,8 +51,23 @@ export async function POST(req: Request) {
     if (a.error || b.error) return NextResponse.json({ error: "Couldn't hand over your published courses. Nothing was deleted. Email support@rrealaiacademy.app." }, { status: 500 });
   }
 
+  // Founders policy: closing the original account permanently forfeits the Founders rate. Record that (forfeiture,
+  // canceled enrollment, audit entry, hashed e-mail tombstone) BEFORE anything is destroyed. If Founders storage is
+  // configured but unavailable, delete nothing.
+  let closure: "closed" | "not_configured";
+  try {
+    closure = await closeFoundersAccount(user.id, user.email);
+  } catch (e) {
+    console.error("Account closure record failed", e instanceof Error ? e.name : "unknown");
+    return unavailable();
+  }
+
   const { error } = await admin.auth.admin.deleteUser(user.id);
-  if (error) return NextResponse.json({ error: "Couldn't delete your account. Nothing was lost. Please try again or email support@rrealaiacademy.app." }, { status: 500 });
+  if (error) {
+    // The closure record above is permanent by policy; say so rather than claiming nothing changed.
+    const note = closure === "closed" ? " Any Founders rate on this account has already been closed and can't be restored." : "";
+    return NextResponse.json({ error: `Couldn't delete your account. Your learning data is intact.${note} Please try again or email support@rrealaiacademy.app.` }, { status: 500 });
+  }
   await sb.auth.signOut().catch(() => null);
   return NextResponse.json({ ok: true });
 }

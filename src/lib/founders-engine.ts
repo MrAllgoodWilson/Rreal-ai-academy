@@ -45,15 +45,40 @@ export function getFoundersCostStore(): PostgresFoundersCostStore {
   return costStore;
 }
 
+export function foundersEngineConfig() {
+  const live = foundersLivemode();
+  return { livemode: live, environment: live ? "production" : "development" };
+}
+
+/** True when this deployment has Founders storage at all. Without it no Founders account can exist. */
+export function foundersStorageConfigured(env: Readonly<Record<string, string | undefined>> = process.env): boolean {
+  return Boolean(env.FOUNDERS_DATABASE_URL || env.DATABASE_URL);
+}
+
 export function getDefaultFoundersRulesEngine(): AccountBoundRulesEngine {
-  if (!engine) {
-    const live = foundersLivemode();
-    engine = new AccountBoundRulesEngine(getFoundersStore(), {
-      livemode: live,
-      environment: live ? "production" : "development",
-    });
-  }
+  if (!engine) engine = new AccountBoundRulesEngine(getFoundersStore(), foundersEngineConfig());
   return engine;
+}
+
+/**
+ * Runs `fn` while holding a session-level advisory lock for one account, serializing every Founders state change for
+ * that account across all processes (the library reads then writes without row locks). The lock dies with the
+ * connection, so a crashed process cannot leave it held. Needs a direct or session-pooled connection.
+ */
+export async function withFoundersAccountLock<T>(company: string, accountId: string, fn: () => Promise<T>): Promise<T> {
+  const key = `founders:${company}:${accountId}`;
+  const lock = await getFoundersPool().connect();
+  try {
+    await lock.query("select pg_advisory_lock(hashtextextended($1, 0))", [key]);
+    return await fn();
+  } finally {
+    try {
+      await lock.query("select pg_advisory_unlock(hashtextextended($1, 0))", [key]);
+      lock.release();
+    } catch {
+      lock.release(true); // drop the connection: its session lock dies with it
+    }
+  }
 }
 
 /** Test seam: lets a harness inject an engine built on its own disposable database. Never used by app code. */

@@ -6,13 +6,14 @@ import { PLAYBOOK_SYSTEM_PROMPT, PlaybookSchema } from "@/lib/playbook-schema";
 import { getMember } from "@/lib/server-auth";
 import { readByok } from "@/lib/byok-server";
 import { resolveAiFunding } from "@/lib/ai-funding";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 
 export const maxDuration = 90;
 
 /** Builds a custom step-by-step playbook for anything the learner wants to create. */
 export async function POST(req: Request) {
-  if (!rateLimit(`pb:${clientIp(req)}`, 6, 60_000).ok) return NextResponse.json({ error: "Please wait a moment." }, { status: 429 });
+  const lim1 = await durableLimit("pb", edgeAddress(req), 6, 60_000);
+  if (lim1 !== "ok") return lim1 === "limited" ? NextResponse.json({ error: "Please wait a moment." }, { status: 429 }) : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
   const parsed = z.object({ request: z.string().trim().min(5).max(600), language: z.enum(["en", "es"]).default("en") }).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Describe what you want to create." }, { status: 400 });
   const who = await getMember({ requireSubscription: true });

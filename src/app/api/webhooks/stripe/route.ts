@@ -33,6 +33,8 @@ function getAllowedPriceIds(): Set<string> {
 }
 
 interface DbError { code?: string; message?: string }
+/** Marks an error the caller explicitly chose to acknowledge. Distinct from a function that returned no result. */
+const TOLERATED = Symbol("tolerated");
 interface AccountResolution { user_id: string; kind: string; price_id?: string; company?: string; livemode?: boolean; source: string }
 
 /**
@@ -81,17 +83,17 @@ export async function POST(req: Request) {
   if (typeof event.id !== "string" || !event.id) return NextResponse.json({ error: "Invalid event" }, { status: 400 });
 
   /** Calls a SQL function; any transport/database error throws (fail closed, retryable). */
-  const rpc = async <T>(fn: string, args: Record<string, unknown>, what: string, tolerate?: (e: DbError) => boolean): Promise<T | null> => {
+  const rpc = async <T>(fn: string, args: Record<string, unknown>, what: string, tolerate?: (e: DbError) => boolean): Promise<T | null | typeof TOLERATED> => {
     const { data, error } = (await admin.rpc(fn, args)) as { data: T | null; error: DbError | null };
     if (error) {
-      if (tolerate?.(error)) return null;
+      if (tolerate?.(error)) return TOLERATED;
       throw new Error(`${what} failed: ${error.message ?? error.code ?? "unknown"}`);
     }
     return data;
   };
 
   // 1. Claim. 'duplicate' = already fully processed. Anything other than new/retry is an invalid result.
-  let claim: string | null;
+  let claim: string | null | typeof TOLERATED;
   try {
     claim = await rpc<string>("claim_webhook_event", { p_id: event.id, p_type: event.type }, "event claim");
   } catch (e) {
@@ -130,8 +132,8 @@ export async function POST(req: Request) {
       "membership save",
       unknownLearner("membership save"),
     );
-    if (result === null) return; // tolerated unknown learner
-    if (typeof result !== "object" || typeof result.updated !== "boolean") {
+    if (result === TOLERATED) return; // unknown learner: can never succeed
+    if (result === null || typeof result !== "object" || typeof result.updated !== "boolean") {
       throw new Error("membership save failed: invalid result from upsert_subscription_ordered");
     }
     if (!result.updated) {
@@ -189,7 +191,7 @@ export async function POST(req: Request) {
       { p_session_id: s.id, p_user_id: userId, p_sub_id: sub.id, p_customer_id: customerId(sub.customer), p_livemode: event.livemode },
       "checkout binding",
     );
-    if (!binding || typeof binding.bound !== "boolean") throw new Error("checkout binding failed: invalid result");
+    if (!binding || binding === TOLERATED || typeof binding.bound !== "boolean") throw new Error("checkout binding failed: invalid result");
 
     if (isFoundersPriced(sub)) {
       // Founders: the session MUST be one we created for this account as a Founders checkout.
@@ -233,6 +235,7 @@ export async function POST(req: Request) {
     }
 
     const account = await rpc<AccountResolution>("resolve_subscription_account", { p_sub_id: sub.id }, "account resolution");
+    if (account === TOLERATED) throw new Error("account resolution failed: invalid result");
     if (!account) {
       // Not (yet) one of ours: no server-side binding exists. checkout.session.completed binds and catches up.
       console.warn("Stripe webhook: subscription has no server-side account binding; ignored", sub.id);

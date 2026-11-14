@@ -19,7 +19,10 @@ for i in $(seq 1 23); do up $S1 $A active $((100+i)) updated >/dev/null & done
 up $S1 $A canceled 50 updated >/dev/null &
 wait
 ok "T1 one row after 24 concurrent first inserts" "$($Q -c "select count(*) from public.subscriptions where stripe_subscription_id='$S1'")" "1"
-ok "T1 terminal cancel wins even with older clock; clock keeps max" "$(st $S1)" "canceled:123"
+# The cancel (oldest timestamp) wins whenever it lands; later 'active' writers are then refused, so the stored clock is
+# whatever the newest event applied BEFORE the cancel was - anything from 50 to 123 depending on arrival order.
+ok "T1 terminal cancel wins even with the oldest clock" "$($Q -c "select status from public.subscriptions where stripe_subscription_id='$S1'")" "canceled"
+ok "T1 clock never below the cancel and never beyond the newest event" "$($Q -c "select last_event_created between 50 and 123 from public.subscriptions where stripe_subscription_id='$S1'")" "t"
 
 # T2 reorder: active(100) -> canceled(300) -> stale active(200) -> newer active(400): stays canceled.
 S2=sub_t2_$R

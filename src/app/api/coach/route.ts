@@ -3,7 +3,7 @@ import { z } from "zod";
 import { offlineCoach, type CoachRequest } from "@/lib/coach-offline";
 import { callClaude } from "@/lib/claude";
 import { getLessonRef } from "@/lib/curriculum";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 import { getMember } from "@/lib/server-auth";
 import { readByok } from "@/lib/byok-server";
 import { resolveAiFunding } from "@/lib/ai-funding";
@@ -24,7 +24,8 @@ const MODE_RULES: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
-  if (!rateLimit(`coach:${clientIp(req)}`, 30, 60_000).ok) return NextResponse.json({ reply: "You're going fast! Give me a few seconds and try again.", mode: "offline" }, { status: 429 });
+  const lim1 = await durableLimit("coach", edgeAddress(req), 30, 60_000);
+  if (lim1 !== "ok") return lim1 === "limited" ? NextResponse.json({ reply: "You're going fast! Give me a few seconds and try again.", mode: "offline" }, { status: 429 }) : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   const body = parsed.data;

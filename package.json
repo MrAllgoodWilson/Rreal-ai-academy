@@ -9,6 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:superseded-probes": "RUN_SUPERSEDED_PROBES=1 vitest run",
+    "test:pgint": "vitest run --config vitest.pgint.config.mts",
     "test:e2e": "node tests/e2e/smoke.mjs",
     "db:seed": "node --experimental-strip-types scripts/generate-seed.mts",
     "cf:build": "opennextjs-cloudflare build",

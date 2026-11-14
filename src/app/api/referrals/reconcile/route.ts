@@ -3,7 +3,7 @@ import { getMember } from "@/lib/server-auth";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
 import { processReferralPaymentEvent } from "@/lib/referrals-server";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 
 /** Deliberate admin retry after missing verification prerequisites are fixed; no browser payment success data is trusted. */
 export async function POST(req: Request) {
@@ -14,7 +14,8 @@ export async function POST(req: Request) {
   if ("error" in who) return who.error;
   const allowed = (process.env.ADMIN_EMAILS || "").split(",").map((email) => email.trim().toLowerCase()).filter(Boolean);
   if (who.demo || !who.member.user.email || !allowed.includes(who.member.user.email.toLowerCase())) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-  if (!rateLimit(`ref-reconcile:${clientIp(req)}`, 2, 60_000).ok) return NextResponse.json({ error: "Please retry later." }, { status: 429 });
+  const lim1 = await durableLimit("ref-reconcile", edgeAddress(req), 2, 60_000);
+  if (lim1 !== "ok") return lim1 === "limited" ? NextResponse.json({ error: "Please retry later." }, { status: 429 }) : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
   const stripe = getStripe();
   const admin = getSupabaseAdmin();
   if (!stripe || !admin) return NextResponse.json({ error: "Verified provider access is not configured." }, { status: 503 });

@@ -3,11 +3,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getMember } from "@/lib/server-auth";
 import { quoteProject } from "@/lib/project-wallet";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 const Body = z.object({ feature: z.string().regex(/^[a-z0-9][a-z0-9:_-]{0,79}$/) }).strict();
 export async function POST(req: Request) {
   if (!sameOriginRequest(req)) return NextResponse.json({ error: "Forbidden origin." }, { status: 403 });
-  if (!rateLimit(`project-quote:${clientIp(req)}`, 10, 60_000).ok) return NextResponse.json({ error: "Please wait before requesting another quote." }, { status: 429 });
+  const lim1 = await durableLimit("project-quote", edgeAddress(req), 10, 60_000);
+  if (lim1 !== "ok") return lim1 === "limited" ? NextResponse.json({ error: "Please wait before requesting another quote." }, { status: 429 }) : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
   const who = await getMember({ requireSubscription: true });
   if ("error" in who) return who.error;
   if (who.demo) return NextResponse.json({ error: "Project quotes are unavailable in demo mode." }, { status: 503 });

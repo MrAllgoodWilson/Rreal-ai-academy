@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 
 /** Aggregate visit count only. A visit is not a signup, payment, human-identity proof or reward. */
 export async function GET(req: Request, { params }: { params: Promise<{ code: string }> }) {
   if (process.env.REFERRALS_ENABLED !== "true") return NextResponse.json({ error: "Referral launch is being prepared." }, { status: 503 });
   const { code } = await params;
   if (!/^[a-f0-9]{32}$/.test(code)) return NextResponse.json({ error: "Referral link not found." }, { status: 404 });
-  if (!rateLimit(`ref-visit:${clientIp(req)}`, 20, 60_000).ok) return NextResponse.json({ error: "Please retry later." }, { status: 429 });
+  const lim1 = await durableLimit("ref-visit", edgeAddress(req), 20, 60_000);
+  if (lim1 === "limited") return NextResponse.json({ error: "Please retry later." }, { status: 429 }); // limiter outage: this public, unbilled route stays up
   const admin = getSupabaseAdmin();
   if (!admin) return NextResponse.json({ error: "Referral links are temporarily unavailable." }, { status: 503 });
   const { data, error } = await admin.rpc("referral_track_visit", { p_code: code });

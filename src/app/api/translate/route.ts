@@ -4,12 +4,13 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getMember } from "@/lib/server-auth";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 
 const Body = z.object({ key: z.string().max(200), lang: z.enum(["es"]), content: z.unknown() });
 
 export async function POST(req: Request) {
-  if (!rateLimit(`tr:${clientIp(req)}`, 60, 60_000).ok) return NextResponse.json({ error: "Slow down" }, { status: 429 });
+  const lim1 = await durableLimit("tr", edgeAddress(req), 60, 60_000);
+  if (lim1 !== "ok") return lim1 === "limited" ? NextResponse.json({ error: "Slow down" }, { status: 429 }) : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid" }, { status: 400 });
   const { key, lang, content } = parsed.data;

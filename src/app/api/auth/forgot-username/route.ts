@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { emailLayout, sendEmail } from "@/lib/email";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 
 /**
  * Forgot-username: emails the username to the address on file.
@@ -10,11 +10,13 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
  */
 export async function POST(req: Request) {
   const generic = NextResponse.json({ ok: true, message: "If an account exists for that email, we've sent your username to it." });
-  if (!rateLimit(`fu:${clientIp(req)}`, 5, 15 * 60_000).ok) return generic;
+  const lim1 = await durableLimit("fu", edgeAddress(req), 5, 15 * 60_000);
+  if (lim1 !== "ok") return lim1 === "limited" ? generic : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
   const parsed = z.object({ email: z.string().email().max(254) }).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return generic;
   const email = parsed.data.email.trim().toLowerCase();
-  if (!rateLimit(`fu-email:${email}`, 3, 60 * 60_000).ok) return generic;
+  const lim2 = await durableLimit("fu-email", email, 3, 60 * 60_000);
+  if (lim2 !== "ok") return lim2 === "limited" ? generic : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
 
   const admin = getSupabaseAdmin();
   if (!admin) return generic;

@@ -1,7 +1,7 @@
 import { unfundedExecution } from "@/lib/execution-policy";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 import { DEFAULT_PREMIUM_VOICE, cloudVoiceById, isPremiumVoice } from "@/lib/voices";
 import { getMember } from "@/lib/server-auth";
 import { readByok } from "@/lib/byok-server";
@@ -12,7 +12,8 @@ import { readByok } from "@/lib/byok-server";
 export async function POST(req: Request) {
   const own = readByok(req).elevenlabs;
   const key = own || process.env.ELEVENLABS_API_KEY;
-  if (!rateLimit(`tts:${clientIp(req)}`, 30, 60_000).ok) return new NextResponse(null, { status: 204 });
+  const lim1 = await durableLimit("tts", edgeAddress(req), 30, 60_000);
+  if (lim1 !== "ok") return lim1 === "limited" ? new NextResponse(null, { status: 204 }) : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
   const parsed = z.object({ text: z.string().min(1).max(1500), voiceId: z.string().max(64).optional(), lang: z.enum(["en", "es"]).optional() }).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return new NextResponse(null, { status: 204 });
 

@@ -7,7 +7,7 @@ import { getMember, takeQuota } from "@/lib/server-auth";
 import { readByok } from "@/lib/byok-server";
 import { resolveAiFunding } from "@/lib/ai-funding";
 import { dispatchPluginEvent } from "@/lib/plugins/dispatch";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 import type { Category, TrackLevel } from "@/lib/curriculum/types";
 
 export const maxDuration = 120;
@@ -21,7 +21,8 @@ const Body = z.object({
 
 /** Generates a custom course with AI, validates it, and saves it to the learner's library. */
 export async function POST(req: Request) {
-  if (!rateLimit(`gen:${clientIp(req)}`, 5, 60_000).ok) return NextResponse.json({ error: "Please wait a minute before generating another course." }, { status: 429 });
+  const lim1 = await durableLimit("gen", edgeAddress(req), 5, 60_000);
+  if (lim1 !== "ok") return lim1 === "limited" ? NextResponse.json({ error: "Please wait a minute before generating another course." }, { status: 429 }) : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Describe the course you want (at least a sentence)." }, { status: 400 });
   const { request, level, language } = parsed.data;

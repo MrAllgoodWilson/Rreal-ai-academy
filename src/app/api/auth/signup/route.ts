@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin, getSupabaseServer } from "@/lib/supabase/server";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 
 /**
  * Server-side sign-up: creates an already-confirmed account (no confirmation email, so it isn't limited by
@@ -17,7 +17,8 @@ const Body = z.object({
 });
 
 export async function POST(req: Request) {
-  if (!rateLimit(`signup:${clientIp(req)}`, 5, 10 * 60_000).ok) return NextResponse.json({ error: "Too many sign-ups from this network. Try again in a few minutes." }, { status: 429 });
+  const lim1 = await durableLimit("signup", edgeAddress(req), 5, 10 * 60_000);
+  if (lim1 !== "ok") return lim1 === "limited" ? NextResponse.json({ error: "Too many sign-ups from this network. Try again in a few minutes." }, { status: 429 }) : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Check your details: username 3–20 letters/numbers/underscores; password 10+ characters with upper and lower case and a number." }, { status: 400 });
   const admin = getSupabaseAdmin();

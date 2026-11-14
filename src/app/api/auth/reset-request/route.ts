@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { emailConfigured, emailLayout, sendEmail } from "@/lib/email";
-import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { durableLimit, edgeAddress } from "@/lib/durable-limit";
 
 /**
  * Password reset that doesn't depend on Supabase's mailer or redirect allow-list:
@@ -15,10 +15,12 @@ export async function POST(req: Request) {
   if (!(await emailConfigured())) return NextResponse.json({ fallback: true }, { status: 501 });
   const admin = getSupabaseAdmin();
   if (!admin) return NextResponse.json({ fallback: true }, { status: 501 });
-  if (!rateLimit(`reset:${clientIp(req)}`, 5, 15 * 60_000).ok) return generic;
+  const lim1 = await durableLimit("reset", edgeAddress(req), 5, 15 * 60_000);
+  if (lim1 !== "ok") return lim1 === "limited" ? generic : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
   const parsed = z.object({ email: z.string().trim().toLowerCase().email().max(254) }).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return generic;
-  if (!rateLimit(`reset-email:${parsed.data.email}`, 3, 60 * 60_000).ok) return generic;
+  const lim2 = await durableLimit("reset-email", parsed.data.email, 3, 60 * 60_000);
+  if (lim2 !== "ok") return lim2 === "limited" ? generic : NextResponse.json({ error: "Temporarily unavailable. Please try again shortly." }, { status: 503 });
 
   const { data, error } = await admin.auth.admin.generateLink({ type: "recovery", email: parsed.data.email });
   if (error || !data?.properties?.hashed_token) return generic; // unknown email → same response
