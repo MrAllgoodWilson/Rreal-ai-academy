@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { FormAlert } from "@/components/AuthCard";
 
 const TIERS = [
-  { id: "community", icon: Megaphone, name: "Community sponsor", desc: "Your logo on our Sponsors page and in the monthly member newsletter. Great for local businesses and creators." },
+  { id: "community", icon: Megaphone, name: "Community sponsor", desc: "Your logo on our Sponsors page and in the monthly learner newsletter. Great for local businesses and creators." },
   { id: "course", icon: Sparkles, name: "Course sponsor", desc: "\"Presented by\" placement on one course or playbook that fits your brand, plus a featured resource inside its lessons." },
   { id: "tool-partner", icon: Wrench, name: "Tool partner", desc: "Get featured in our step-by-step Playbooks where learners pick the tools they need, with your partner or affiliate link." },
   { id: "title", icon: Handshake, name: "Title partner", desc: "Co-branded certificates, a dedicated learning path, scholarships for your community, and quarterly impact reports." },
@@ -33,10 +33,10 @@ export default function SponsorsPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6">
-      <PageHeader eyebrow="Sponsors" title="Help everyone learn AI for $1 a month" />
+      <PageHeader eyebrow="Sponsors" title="Help everyone learn AI — for free" />
       <p className="max-w-3xl text-lg text-muted">
         Rreal AI Academy teaches AI from absolute beginner to expert, in English and Spanish, with accessibility built in for blind, deaf and disabled learners.
-        Sponsors keep the price at $1 and put their brand in front of motivated people who are building real projects.
+        Sponsors keep Rreal AI Academy free for everyone and put their brand in front of motivated people who are building real projects.
       </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2" role="radiogroup" aria-label="Sponsorship type">

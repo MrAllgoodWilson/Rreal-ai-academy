@@ -9,6 +9,7 @@ import { Logo } from "@/components/Logo";
 import { A11yPanel } from "@/components/A11yPanel";
 import { useAcademy } from "@/lib/store";
 import { useI18n, type TKey } from "@/lib/i18n";
+import { FREE_ACCESS } from "@/lib/entitlement";
 
 const NAV: { href: string; label: TKey; icon: typeof BookOpen }[] = [
   { href: "/dashboard", label: "nav.dashboard", icon: LayoutDashboard },
@@ -122,7 +123,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               ) : (
                 <>
                   <Link href="/login" className="btn-ghost hidden sm:inline-flex">{t("nav.signin")}</Link>
-                  <Link href="/signup" className="btn-primary">{t("nav.join")}</Link>
+                  <Link href="/signup" className="btn-primary">{FREE_ACCESS ? t("nav.joinFree") : t("nav.join")}</Link>
                 </>
               )}
             </div>

@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Accessibility, ArrowRight, BadgeCheck, Captions, Check, Clapperboard, Ear, Eye, FlaskConical, Mic, Minus, ShieldCheck, Sparkles, Trophy, Zap } from "lucide-react";
 import { TRACKS, ALL_LESSONS, ALL_TRACKS } from "@/lib/curriculum";
 import { useAcademy } from "@/lib/store";
+import { FREE_ACCESS } from "@/lib/entitlement";
 
 const fade = { initial: { opacity: 0, y: 24 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, margin: "-80px" }, transition: { duration: 0.5 } };
 
@@ -51,7 +52,7 @@ export default function Home() {
       <section className="grid grid-cols-1 items-center gap-12 py-12 sm:py-16 lg:grid-cols-[1.1fr_0.9fr] lg:py-24 [&>*]:min-w-0" aria-labelledby="hero-title">
         <div>
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="chip mb-6 border-neon/40 text-neon">
-            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> {ALL_TRACKS.length} courses · {ALL_LESSONS.length} lessons · English & Español · $1/month
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> {ALL_TRACKS.length} courses · {ALL_LESSONS.length} lessons · English & Español · Free
           </motion.p>
           <motion.h1 id="hero-title" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="font-display text-[2.5rem] font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
             Go from <span className="heading-gradient">“what is AI?”</span> to AI expert.
@@ -61,14 +62,14 @@ export default function Home() {
           </motion.p>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="mt-8 flex flex-wrap gap-3">
             <Link href={cta} className="btn-primary text-lg">
-              {user ? "Continue learning" : "Join for $1/month"} <ArrowRight className="h-5 w-5" aria-hidden="true" />
+              {user ? "Continue learning" : (FREE_ACCESS ? "Start learning free" : "Join for $1/month")} <ArrowRight className="h-5 w-5" aria-hidden="true" />
             </Link>
             <Link href="/pricing" className="btn-ghost text-lg">See plans</Link>
           </motion.div>
           <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted">
-            <li className="flex items-center gap-2"><Check className="h-4 w-4 text-lime" aria-hidden="true" /> Every course & tool for $1/month</li>
+            <li className="flex items-center gap-2"><Check className="h-4 w-4 text-lime" aria-hidden="true" /> {FREE_ACCESS ? "Every course & tool is free" : "Every course & tool for $1/month"}</li>
             <li className="flex items-center gap-2"><Check className="h-4 w-4 text-lime" aria-hidden="true" /> Built for screen readers & captions</li>
-            <li className="flex items-center gap-2"><Check className="h-4 w-4 text-lime" aria-hidden="true" /> Cancel anytime</li>
+            <li className="flex items-center gap-2"><Check className="h-4 w-4 text-lime" aria-hidden="true" /> {FREE_ACCESS ? "No card needed" : "Cancel anytime"}</li>
           </ul>
         </div>
 
@@ -211,9 +212,9 @@ export default function Home() {
       {/* CTA */}
       <motion.section {...fade} className="py-20 text-center" aria-labelledby="cta-title">
         <h2 id="cta-title" className="font-display text-4xl font-bold sm:text-5xl">Your first AI win is 6 minutes away.</h2>
-        <p className="mx-auto mt-4 max-w-xl text-muted">Every course, playbook, tool and certificate for $1 a month. In English and Spanish. Cancel anytime.</p>
+        <p className="mx-auto mt-4 max-w-xl text-muted">{FREE_ACCESS ? "Every course, playbook, tool and certificate — free. In English and Spanish. No card needed." : "Every course, playbook, tool and certificate for $1 a month. In English and Spanish. Cancel anytime."}</p>
         <Link href={cta} className="btn-primary mt-8 text-lg">
-          {user ? "Back to my dashboard" : "Join for $1/month"} <ArrowRight className="h-5 w-5" aria-hidden="true" />
+          {user ? "Back to my dashboard" : (FREE_ACCESS ? "Start learning free" : "Join for $1/month")} <ArrowRight className="h-5 w-5" aria-hidden="true" />
         </Link>
       </motion.section>
     </div>

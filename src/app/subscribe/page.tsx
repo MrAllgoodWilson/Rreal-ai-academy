@@ -11,6 +11,7 @@ import { useAcademy } from "@/lib/store";
 import { useI18n } from "@/lib/i18n";
 import { ALL_TRACKS, PLAYBOOKS, ALL_LESSONS } from "@/lib/curriculum";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
+import { FREE_ACCESS } from "@/lib/entitlement";
 
 const PERKS = [
   "The 8-week Rreal AI Mastery Program (Dummy → Expert)",
@@ -101,11 +102,29 @@ function Subscribe() {
   );
 }
 
+/**
+ * Free access: there is nothing to subscribe to. Old links, bookmarks and Stripe return URLs (including a checkout started before
+ * the Academy became free) simply continue to the learner's destination. The paid flow above returns only if NEXT_PUBLIC_FREE_ACCESS=false.
+ */
+function FreeContinue() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const raw = params.get("next") || "/dashboard";
+  const next = raw.startsWith("/") && !raw.startsWith("//") && !raw.startsWith("/subscribe") ? raw : "/dashboard";
+  useEffect(() => { router.replace(next); }, [router, next]);
+  return (
+    <div className="grid min-h-[60vh] place-items-center" role="status" aria-live="polite">
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-line border-t-neon" aria-hidden="true" />
+      <span className="sr-only">Rreal AI Academy is free. Taking you to your learning…</span>
+    </div>
+  );
+}
+
 export default function SubscribePage() {
   return (
     <RequireAuth>
       <Suspense>
-        <Subscribe />
+        {FREE_ACCESS ? <FreeContinue /> : <Subscribe />}
       </Suspense>
     </RequireAuth>
   );

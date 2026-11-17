@@ -39,7 +39,7 @@ export function ImageMaker() {
   return (
     <section className="card space-y-4" aria-labelledby="img-h">
       <h2 id="img-h" className="flex items-center gap-2 font-display text-xl font-semibold"><ImagePlus className="h-5 w-5 text-neon" aria-hidden="true" /> AI image maker</h2>
-      <p className="text-sm text-muted">Create artwork for flyers, thumbnails, logos and posters. Add your words afterwards in Canva or any editor. Included with membership (10 per day).</p>
+      <p className="text-sm text-muted">Create artwork for flyers, thumbnails, logos and posters. Add your words afterwards in Canva or any editor. Free for every learner (10 per day).</p>
       <form className="space-y-3" onSubmit={go}>
         <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Image style">
           {STYLES.map(([id, label]) => (

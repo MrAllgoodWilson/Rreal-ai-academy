@@ -35,7 +35,7 @@ const DICT = {
     "lesson.listen": "Listen", "lesson.stop": "Stop", "lesson.askCoach": "Ask Coach", "lesson.locked": "Finish the previous lesson first", "lesson.paywall": "Members only",
     "lesson.translating": "Translating…",
     "pay.title": "One price. Everything included.", "pay.sub": "Every course, every tool, every certificate — $1 per month. Cancel anytime.", "pay.cta": "Join for $1/month",
-    "pay.active": "Your membership is active", "pay.required": "Complete your membership to unlock your dashboard and courses.",
+    "pay.active": "Your membership is active", "pay.required": "Complete your membership to unlock your dashboard and courses.", "free.title": "Free for everyone. Everything included.", "free.sub": "Every course, every tool, every certificate — free. No card, no trial.", "free.cta": "Start learning free", "free.dash": "Go to my dashboard", "nav.joinFree": "Start free",
     "common.save": "Save", "common.loading": "Loading…", "common.cancel": "Cancel", "common.delete": "Delete", "common.copy": "Copy", "common.open": "Open", "common.level": "Level",
   },
   es: {
@@ -64,7 +64,7 @@ const DICT = {
     "lesson.listen": "Escuchar", "lesson.stop": "Detener", "lesson.askCoach": "Preguntar al Coach", "lesson.locked": "Termina primero la lección anterior", "lesson.paywall": "Solo para miembros",
     "lesson.translating": "Traduciendo…",
     "pay.title": "Un precio. Todo incluido.", "pay.sub": "Todos los cursos, herramientas y certificados — $1 al mes. Cancela cuando quieras.", "pay.cta": "Únete por $1/mes",
-    "pay.active": "Tu membresía está activa", "pay.required": "Completa tu membresía para desbloquear tu panel y tus cursos.",
+    "pay.active": "Tu membresía está activa", "pay.required": "Completa tu membresía para desbloquear tu panel y tus cursos.", "free.title": "Gratis para todos. Todo incluido.", "free.sub": "Todos los cursos, herramientas y certificados — gratis. Sin tarjeta ni prueba.", "free.cta": "Empieza a aprender gratis", "free.dash": "Ir a mi panel", "nav.joinFree": "Empieza gratis",
     "common.save": "Guardar", "common.loading": "Cargando…", "common.cancel": "Cancelar", "common.delete": "Eliminar", "common.copy": "Copiar", "common.open": "Abrir", "common.level": "Nivel",
   },
 } as const;

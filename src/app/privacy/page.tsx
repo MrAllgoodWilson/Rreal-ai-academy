@@ -33,7 +33,7 @@ export default function PrivacyPage() {
         <p>Some courses and playbooks may show sponsor or partner links. We do not share your personal information with sponsors. If a link is an affiliate link, we may earn a commission at no cost to you.</p>
 
         <H>Your choices</H>
-        <p>Export your data any time in Settings. Delete your account in Settings → Your data → Delete my account (cancel an active membership first). Deleting permanently removes your profile, progress, certificates, credits and private courses. Courses you published for everyone remain available without your account. You can also email us to ask for access, correction or deletion.</p>
+        <p>Export your data any time in Settings. Delete your account in Settings → Your data → Delete my account (if you have a paid membership from before the Academy became free, cancel it first). Deleting permanently removes your profile, progress, certificates, credits and private courses. Courses you published for everyone remain available without your account. You can also email us to ask for access, correction or deletion.</p>
 
         <H>Children</H>
         <p>Rreal AI Academy is for people 13 and older. If you are under 18, use it with a parent or guardian&apos;s permission.</p>

@@ -57,17 +57,15 @@ await page.getByLabel(/I agree/).check();
 await axe("signup");
 await shot("02-signup");
 await page.getByRole("button", { name: "Create account" }).click();
-await page.waitForURL("**/subscribe*");
-ok("sign up → membership paywall", page.url().includes("/subscribe"));
-await page.goto(`${BASE}/dashboard`);
-await page.waitForURL("**/subscribe*");
-ok("dashboard blocked until paid", page.url().includes("/subscribe"));
-await page.waitForTimeout(600);
-await shot("02b-subscribe");
-await axe("subscribe");
-await page.getByRole("button", { name: /Join for \$1\/month/ }).click();
+// Free for everyone: sign-up goes straight to onboarding — no payment step, no paywall.
 await page.waitForURL("**/onboarding");
-ok("payment → onboarding", page.url().endsWith("/onboarding"));
+ok("free sign up → onboarding (no paywall)", page.url().endsWith("/onboarding") && !page.url().includes("/subscribe"));
+await page.goto(`${BASE}/subscribe`);
+await page.waitForURL((u) => !u.pathname.startsWith("/subscribe"));
+ok("old /subscribe link just continues (no checkout)", !page.url().includes("/subscribe"));
+ok("no payment prompt anywhere on the way in", !(await page.getByRole("button", { name: /Join for \$1\/month/ }).isVisible().catch(() => false)));
+await page.goto(`${BASE}/onboarding`);
+await page.waitForTimeout(400);
 
 // 3. Onboarding
 await page.getByRole("radio", { name: /Boost my career/ }).click();
@@ -154,7 +152,7 @@ ok("studio exports .ics", dl.suggestedFilename().endsWith(".ics"));
 
 // 8. Pricing, catalog, playbooks, creator, connections, Spanish
 await page.goto(`${BASE}/pricing`);
-ok("pricing shows $1/month", await seen(page.getByText("$1", { exact: false })));
+ok("pricing says the Academy is free (no $1/month)", (await seen(page.getByText("Free", { exact: true }))) && !(await page.getByText("$1/month").isVisible().catch(() => false)));
 await shot("10-pricing");
 await page.goto(`${BASE}/learn`);
 ok("catalog lists standalone courses", await seen(page.getByRole("heading", { name: /Build a Website with AI — No Code/ })));

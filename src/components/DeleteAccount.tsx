@@ -33,7 +33,7 @@ export function DeleteAccount() {
 
   return (
     <form onSubmit={go} className="space-y-3 rounded-xl border border-danger/60 p-4">
-      <p className="text-sm">This permanently deletes your profile, progress, certificates, credits and private courses. It can&apos;t be undone. Cancel your membership first if you have one.</p>
+      <p className="text-sm">This permanently deletes your profile, progress, certificates, credits and private courses. It can&apos;t be undone. If you have a paid membership from before the Academy became free, cancel it first.</p>
       <label htmlFor="del-confirm" className="label">Type DELETE to confirm</label>
       <input id="del-confirm" className="input" autoComplete="off" value={text} onChange={(e) => setText(e.target.value)} />
       {err && <p role="alert" className="text-sm text-danger">{err}</p>}

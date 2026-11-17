@@ -3,7 +3,7 @@
 Guidance for Claude (and humans) working in this repository.
 
 ## What this is
-Rreal AI Academy is a $1/month subscription web app (installable PWA, English + Spanish) that teaches AI from absolute beginner to expert:
+Rreal AI Academy is a free-for-everyone web app (installable PWA, English + Spanish; founder decision 2026-11-17, previously $1/month — see `docs/FREE_ACCESS_2026-11-17.md`) that teaches AI from absolute beginner to expert:
 the 8-week Mastery Program (5 tracks), 12 standalone courses (Dummy → Expert), step-by-step Playbooks (videos, flyers, websites…),
 an AI Course Creator (learners request any course; admins publish the best to everyone), a two-way voice tutor ("Rreal Coach") with
 selectable voices, a Prompt Sandbox, a Social Video Studio with real AI video rendering, social-account connections, plugins (webhooks),
@@ -93,10 +93,10 @@ docs/                       product docs, open questions, screenshots
    high-contrast variants in `globals.css`.
 
 ## Database (Supabase)
-- Production project: `rreal-ai-academy` (`vwajwkhlehgmpecrwnur`). Apply migrations in order (0001, 0002, 0003), then `supabase/seed.sql`. All three are applied in production.
+- Production project: `rreal-ai-academy` (`vwajwkhlehgmpecrwnur`). Apply migrations in order, then `supabase/seed.sql`. Verified in production on 2026-11-17: 0001-0005 are applied; 0006-0009 (referrals, project wallet) and 0010 (free access, awaiting founder approval) are NOT.
 - `tests/sql/v2-checks.sh` runs behavioural checks for 0002 against a local Postgres with Supabase-style stubs.
-- Every lesson is paid (membership); program lessons unlock in order across tracks, course lessons in order inside the course.
-- Paid AI features MUST call `takeQuota()` — at $1/month a single unmetered user can cost more than they pay.
+- Every lesson is free for signed-in learners (`src/lib/entitlement.ts` `FREE_ACCESS`; database switch `app_settings.free_access`, migration 0010); program lessons unlock in order across tracks, course lessons in order inside the course. Existing paid subscriptions are never changed implicitly.
+- AI features that cost money MUST call `takeQuota()` — access is free, so one unmetered account can cost more than the whole community.
 - Key functions: `complete_lesson`, `username_available` (public), `email_for_username` / `username_for_email` (service role only),
   `leaderboard_weekly`, `certificate_status`.
 - In Supabase Auth settings: enable email confirmations, set Site URL, add `/reset-password` and `/onboarding` to redirect URLs,

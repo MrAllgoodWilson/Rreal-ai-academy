@@ -7,7 +7,11 @@ import { AuthCard, Field, FormAlert, PasswordField } from "@/components/AuthCard
 import { useI18n } from "@/lib/i18n";
 import { rememberReferral, forgetReferral, validReferralCode } from "@/lib/referrals-client";
 import { USERNAME_RE, useAcademy } from "@/lib/store";
+import { FREE_ACCESS } from "@/lib/entitlement";
 import { signupOutcome } from "@/lib/signup-flow";
+
+/** Free access: new learners go straight to their dashboard (which starts onboarding). The paid flow (kill switch off) still goes via /subscribe. */
+const AFTER_SIGNUP = FREE_ACCESS ? "/dashboard" : "/subscribe";
 
 export default function SignupPage() {
   const { lang } = useI18n();
@@ -20,7 +24,7 @@ export default function SignupPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (ready && user) router.replace("/subscribe");
+    if (ready && user) router.replace(AFTER_SIGNUP);
   }, [ready, user, router]);
 
   useEffect(() => {
@@ -34,7 +38,7 @@ export default function SignupPage() {
   return (
     <AuthCard
       title="Create your account"
-      subtitle={lang === "es" ? "Todos los cursos publicados por $1 al mes. La ejecución de IA opcional tiene costo aparte cuando esté disponible. Cancela cuando quieras." : "Every published course for $1/month. Optional AI execution costs extra when available. Cancel anytime."}
+      subtitle={FREE_ACCESS ? (lang === "es" ? "Todos los cursos publicados, gratis. Sin tarjeta. Los créditos opcionales para IA premium tienen costo aparte, pero nunca son necesarios para aprender." : "Every published course, free. No card needed. Optional credits for premium AI cost extra, but are never needed to learn.") : (lang === "es" ? "Todos los cursos publicados por $1 al mes. La ejecución de IA opcional tiene costo aparte cuando esté disponible. Cancela cuando quieras." : "Every published course for $1/month. Optional AI execution costs extra when available. Cancel anytime.")}
       footer={
         <>
           Already have an account? <Link href="/login" className="font-semibold text-neon hover:underline">Sign in</Link>
@@ -56,7 +60,7 @@ export default function SignupPage() {
           if (outcome.kind === "navigate") {
             // Account created and signed in: go on to checkout now. `busy` stays true so the form cannot be submitted a
             // second time while the page changes (a repeat submit is what produced "email already exists" on 2026-11-16).
-            router.replace("/subscribe");
+            router.replace(AFTER_SIGNUP);
             return;
           }
           setBusy(false);

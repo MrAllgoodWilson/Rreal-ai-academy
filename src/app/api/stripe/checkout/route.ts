@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { getStripe, MONTHLY_PRICE_ID } from "@/lib/stripe";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { FREE_ACCESS } from "@/lib/entitlement";
 
 /**
- * Starts the $1/month membership checkout.
+ * Starts the $1/month membership checkout (DISABLED while FREE_ACCESS is on: answers 410 before touching Stripe).
  * - With STRIPE_SECRET_KEY: creates a Checkout Session (best experience).
  * - Otherwise: falls back to the Stripe Payment Link (NEXT_PUBLIC_STRIPE_PAYMENT_LINK) tagged with the user id.
  * - Demo mode (no Supabase): 501 → the client activates a local demo membership.
  */
 export async function POST(req: Request) {
+  // Free access (lib/entitlement.ts): there is nothing to buy. Refuse BEFORE any Stripe call so no checkout session, customer or
+  // live charge can ever be created from here while the Academy is free. (Existing subscribers use the billing portal, not this route.)
+  if (FREE_ACCESS) return NextResponse.json({ error: "Rreal AI Academy is free for everyone. No payment is needed.", code: "free_access" }, { status: 410 });
   const sb = await getSupabaseServer();
   if (!sb) return NextResponse.json({ demo: true }, { status: 501 });
   const { data: auth } = await sb.auth.getUser();

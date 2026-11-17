@@ -2,10 +2,11 @@ import "server-only";
 import { NextResponse } from "next/server";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { FREE_ACCESS } from "@/lib/entitlement";
 
 /**
- * Per-feature monthly/daily allowances. At $1/month every paid AI call must be capped,
- * otherwise a single heavy user costs more than they pay. Tune with env vars.
+ * Per-feature monthly/daily allowances. Access is free for every signed-in learner, so every AI call that costs us money must
+ * stay capped: one unmetered account could otherwise cost more than the whole free community. Tune with env vars.
  */
 export const QUOTAS = {
   coach: { limit: Number(process.env.QUOTA_COACH_PER_DAY ?? 40), period: "day" },
@@ -31,9 +32,14 @@ export async function getMember(opts: { requireSubscription?: boolean } = {}): P
   if (!sb) return { demo: true };
   const { data } = await sb.auth.getUser();
   if (!data.user) return { error: NextResponse.json({ error: "Please sign in." }, { status: 401 }) };
-  const { data: sub } = await sb.from("subscriptions").select("status").eq("user_id", data.user.id).in("status", ["active", "trialing"]).limit(1).maybeSingle();
-  const subscribed = !!sub;
-  if (opts.requireSubscription && !subscribed) return { error: NextResponse.json({ error: "An active membership ($1/month) is required.", code: "subscription_required" }, { status: 402 }) };
+  // Free access (lib/entitlement.ts): every signed-in learner is entitled, so no subscription lookup is needed. With the kill
+  // switch off, only active/trialing subscribers are entitled, exactly as before.
+  let subscribed = FREE_ACCESS;
+  if (!subscribed) {
+    const { data: sub } = await sb.from("subscriptions").select("status").eq("user_id", data.user.id).in("status", ["active", "trialing"]).limit(1).maybeSingle();
+    subscribed = !!sub;
+  }
+  if (opts.requireSubscription && !subscribed) return { error: NextResponse.json({ error: "An active membership is required.", code: "subscription_required" }, { status: 402 }) };
   return { demo: false, member: { sb, user: data.user, subscribed } };
 }
 

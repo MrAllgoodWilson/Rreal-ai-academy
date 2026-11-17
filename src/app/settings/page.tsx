@@ -12,6 +12,7 @@ import { DeleteAccount } from "@/components/DeleteAccount";
 import { useI18n } from "@/lib/i18n";
 import { FormAlert } from "@/components/AuthCard";
 import { useAcademy } from "@/lib/store";
+import { FREE_ACCESS } from "@/lib/entitlement";
 
 const AVATARS = ["🦊", "🦄", "🐼", "🦁", "🐙", "🦉", "🐯", "🐸", "🤖", "👩🏽‍🚀", "🧑🏿‍💻", "🧕🏻", "👨🏼‍🎨", "🧑🏾‍🦽"];
 
@@ -100,8 +101,14 @@ function Settings() {
         <section className="card space-y-4" aria-labelledby="bill-h">
           <h2 id="bill-h" className="font-display text-xl font-semibold">Plan & billing</h2>
           <p>Status: <strong className="capitalize">{subscription.status === "none" ? "Free" : subscription.status}</strong>{subscription.plan && ` · ${subscription.plan}`}</p>
+          {FREE_ACCESS && (subscription.status === "active" || subscription.status === "trialing") && (
+            <p className="rounded-xl border border-line p-4 text-sm text-muted" role="note">
+              Rreal AI Academy is now free for everyone, so you no longer need a paid membership. Yours has not been changed or cancelled: it stays active and keeps renewing until <em>you</em> cancel it with &ldquo;Manage billing / cancel&rdquo; below. Nothing happens automatically.
+            </p>
+          )}
+          {FREE_ACCESS && subscription.status === "none" && <p className="text-sm text-muted">Everything in the Academy is free. No card needed.</p>}
           <div className="flex flex-wrap gap-3">
-            <button type="button" className="btn-ghost" onClick={() => router.push("/pricing")}>Change plan</button>
+            {!FREE_ACCESS && <button type="button" className="btn-ghost" onClick={() => router.push("/pricing")}>Change plan</button>}
             {subscription.status !== "none" && <button type="button" className="btn-ghost" onClick={billing}>Manage billing / cancel</button>}
           </div>
         </section>

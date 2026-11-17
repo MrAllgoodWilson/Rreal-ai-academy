@@ -27,7 +27,7 @@ function Credits() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
-      <PageHeader eyebrow="Credits" title="Power-ups" subtitle="Your membership stays $1/month forever. Add credits only when you want extra AI power." />
+      <PageHeader eyebrow="Credits" title="Power-ups" subtitle="Learning here is free, always. Add credits only if you want extra AI power — they are never required to learn or get certified." />
       {purchased && <div className="mb-6"><FormAlert kind="success">Payment received! Your credits appear here within a few seconds.</FormAlert></div>}
       <div className="mb-8 grid gap-4 sm:grid-cols-2">
         <div className="card flex items-center gap-4"><Film className="h-10 w-10 text-violet" aria-hidden="true" /><div><p className="font-display text-3xl font-bold">{data?.balances.video ?? "–"}</p><p className="text-muted">AI video credits <span className="text-xs">(+1 free render every month)</span></p></div></div>

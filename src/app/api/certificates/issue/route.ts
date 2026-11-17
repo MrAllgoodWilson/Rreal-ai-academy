@@ -6,6 +6,7 @@ import { accreditationFor } from "@/lib/certificates/accreditation";
 import { getSupabaseAdmin, getSupabaseServer } from "@/lib/supabase/server";
 import { dispatchPluginEvent } from "@/lib/plugins/dispatch";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { FREE_ACCESS } from "@/lib/entitlement";
 
 const Body = z.object({
   trackId: z.string().max(100),
@@ -55,7 +56,8 @@ export async function POST(req: Request) {
     const [{ data: rows }, { data: profile }, { data: sub }] = await Promise.all([
       sb.from("lesson_progress").select("lesson_id, score").eq("user_id", userId),
       sb.from("profiles").select("display_name").eq("id", userId).single(),
-      sb.from("subscriptions").select("status").eq("user_id", userId).in("status", ["active", "trialing"]).limit(1).maybeSingle(),
+      // Free access: certificates are earned by completing the lessons, not by paying (the lookup only matters with the kill switch off).
+      FREE_ACCESS ? Promise.resolve({ data: { status: "free" } }) : sb.from("subscriptions").select("status").eq("user_id", userId).in("status", ["active", "trialing"]).limit(1).maybeSingle(),
     ]);
     if (!sub) return NextResponse.json({ error: "Certificates require an active membership." }, { status: 402 });
     completedLessonIds = (rows ?? []).map((r) => r.lesson_id);

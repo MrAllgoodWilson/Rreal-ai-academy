@@ -27,7 +27,7 @@ export function AiAccounts() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted">
-        Your $1 membership includes every course plus our built-in AI. To build real projects with premium tools, connect <strong className="text-ink">your own</strong> accounts below, or buy credits.
+        Every course plus our built-in AI is free for you. To build real projects with premium tools, connect <strong className="text-ink">your own</strong> accounts below, or buy credits.
         Keys are saved only in this browser and sent securely with each request. We never store them on our servers.
       </p>
       <p className="sr-only" role="status" aria-live="polite">{status}</p>

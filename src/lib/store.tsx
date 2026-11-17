@@ -6,6 +6,7 @@ import { applyActivity, dayKey, levelForXp, streakMultiplier, type StreakState }
 import { BADGES, newlyEarned, type BadgeStats } from "@/lib/badges";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
 import { isDemoMode } from "@/lib/config";
+import { hasAccess } from "@/lib/entitlement";
 
 /* ───────────────────────── Types ───────────────────────── */
 
@@ -472,7 +473,9 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
     user,
     progress,
     subscription,
-    subscribed: subscription.status === "active" || subscription.status === "trialing",
+    // "subscribed" means ENTITLED: everyone while free access is on (see lib/entitlement.ts), otherwise active/trialing subscribers.
+    // Billing UI must read `subscription.status` instead (it still reflects real paid memberships).
+    subscribed: hasAccess(subscription.status),
     level: levelForXp(progress.xp),
     todayXp: progress.xpByDay[dayKey()] ?? 0,
     celebrations,
