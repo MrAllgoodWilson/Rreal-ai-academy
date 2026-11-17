@@ -73,7 +73,7 @@ export type Celebration =
   | { kind: "streak"; days: number }
   | { kind: "certificate"; title: string };
 
-type Result = { ok: true; message?: string; demoLink?: string } | { ok: false; error: string };
+type Result = { ok: true; message?: string; demoLink?: string } | { ok: false; error: string; code?: string };
 
 const freshProgress = (): Progress => ({
   xp: 0,
@@ -323,7 +323,7 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
       const res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, username, password, displayName, referralCode }) });
       if (res.status !== 501) {
         const json = await res.json().catch(() => ({}));
-        if (!res.ok) return { ok: false, error: json.error ?? "Couldn't create your account." };
+        if (!res.ok) return { ok: false, error: json.error ?? "Couldn't create your account.", code: typeof json.code === "string" ? json.code : undefined };
         await sb.auth.refreshSession();
         return json.signedIn ? { ok: true } : { ok: true, message: "Account created. Please sign in." };
       }

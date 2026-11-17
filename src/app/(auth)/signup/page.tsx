@@ -7,6 +7,7 @@ import { AuthCard, Field, FormAlert, PasswordField } from "@/components/AuthCard
 import { useI18n } from "@/lib/i18n";
 import { rememberReferral, forgetReferral, validReferralCode } from "@/lib/referrals-client";
 import { USERNAME_RE, useAcademy } from "@/lib/store";
+import { signupOutcome } from "@/lib/signup-flow";
 
 export default function SignupPage() {
   const { lang } = useI18n();
@@ -14,6 +15,7 @@ export default function SignupPage() {
   const router = useRouter();
   const [f, setF] = useState({ displayName: "", username: "", email: "", password: "", referralCode: "", agree: false });
   const [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -47,14 +49,32 @@ export default function SignupPage() {
           if (!f.agree) return setError("Please accept the Terms and Privacy Policy to continue.");
           setBusy(true);
           setError("");
+          setErrorCode("");
           if (f.referralCode) rememberReferral(f.referralCode); else forgetReferral();
           const r = await signUp({ ...f, referralCode: f.referralCode || undefined });
+          const outcome = signupOutcome(r);
+          if (outcome.kind === "navigate") {
+            // Account created and signed in: go on to checkout now. `busy` stays true so the form cannot be submitted a
+            // second time while the page changes (a repeat submit is what produced "email already exists" on 2026-11-16).
+            router.replace("/subscribe");
+            return;
+          }
           setBusy(false);
-          if (!r.ok) setError(r.error);
-          else if (r.message) setNotice(r.message);
+          if (outcome.kind === "error") { setError(outcome.message); setErrorCode(outcome.code ?? ""); }
+          else setNotice(outcome.message);
         }}
       >
-        {error && <FormAlert kind="error">{error}</FormAlert>}
+        {error && (
+          <FormAlert kind="error">
+            {error}
+            {errorCode === "email_exists" && (
+              <span className="mt-2 block">
+                <Link href="/login" className="font-semibold underline">Sign in</Link>{" · "}
+                <Link href="/forgot-password" className="font-semibold underline">Forgot password</Link>
+              </span>
+            )}
+          </FormAlert>
+        )}
         {notice && <FormAlert kind="success">{notice}</FormAlert>}
         <Field id="displayName" label="Your name" hint="Shown on your certificates — use your real name." autoComplete="name" value={f.displayName} onChange={(e) => setF({ ...f, displayName: e.target.value })} required />
         <Field id="username" label="Username" autoComplete="username" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value.trim() })} error={usernameErr} required />

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin, getSupabaseServer } from "@/lib/supabase/server";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { classifyCreateUserError } from "@/lib/signup-errors";
 
 /**
  * Server-side sign-up: creates an already-confirmed account (no confirmation email, so it isn't limited by
@@ -30,8 +31,16 @@ export async function POST(req: Request) {
 
   const { data: created, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { username, display_name: displayName } });
   if (error) {
-    const taken = /already|registered|exists/i.test(error.message);
-    return NextResponse.json({ error: taken ? "An account with that email already exists. Try signing in." : "Couldn't create your account. Please try again." }, { status: taken ? 409 : 500 });
+    if (classifyCreateUserError(error) === "email_exists") {
+      // Retry / double-submit safe: the same email WITH the same password just signs the person in (they have proven the
+      // password, nothing is created or changed). Any other password is a real existing account: never overwritten, never opened.
+      const { error: existingSignInError } = await sb.auth.signInWithPassword({ email, password });
+      if (!existingSignInError) return NextResponse.json({ ok: true, signedIn: true, existing: true, referralPending: false });
+      return NextResponse.json({ error: "That email already has an account. Sign in, or use Forgot password if you don't remember it.", code: "email_exists" }, { status: 409 });
+    }
+    // Log the code only: the message can contain the address.
+    console.error("Signup createUser failed", error.code ?? error.status ?? "unknown");
+    return NextResponse.json({ error: "Couldn't create your account. Please try again." }, { status: 500 });
   }
   let referralPending = false;
   if (process.env.REFERRALS_ENABLED === "true" && referralCode && created.user) {
