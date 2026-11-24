@@ -27,18 +27,24 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
 page.on("console", (m) => { if (m.type() === "error" && !/favicon|Failed to load resource/.test(m.text())) errors.push(`console: ${m.text().slice(0, 160)}`); });
 const seen = (loc, timeout = 10000) => loc.first().waitFor({ timeout }).then(() => true, () => false);
-const axe = async (label) => {
-  await page.addScriptTag({ path: AXE });
-  const r = await page.evaluate(async () => (await window.axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] })).violations.map((v) => ({ id: v.id, impact: v.impact, n: v.nodes.length })));
+const axe = async (label, pg = page) => {
+  await pg.waitForTimeout(1300); // let entrance animations finish; mid-fade colours give false contrast failures
+  await pg.addScriptTag({ path: AXE });
+  const r = await pg.evaluate(async () => (await window.axe.run(document, { runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"] })).violations.map((v) => ({
+    id: v.id, impact: v.impact, n: v.nodes.length,
+    nodes: v.nodes.slice(0, 4).map((n) => ({ target: n.target.join(" "), text: (n.html || "").replace(/\s+/g, " ").slice(0, 90), data: (n.any[0] && n.any[0].data) ? { fg: n.any[0].data.fgColor, bg: n.any[0].data.bgColor, ratio: n.any[0].data.contrastRatio, size: n.any[0].data.fontSize } : null })),
+  })));
   const serious = r.filter((v) => v.impact === "serious" || v.impact === "critical");
   ok(`axe ${label}`, serious.length === 0, serious.map((v) => `${v.id}(${v.impact}×${v.n})`).join(", ") || "clean");
+  if (serious.length && process.env.DEBUG_AXE) for (const v of serious) for (const n of v.nodes) console.log("   ·", v.id, n.target, JSON.stringify(n.data), n.text);
 };
 const dismissCelebrations = async () => {
   for (let i = 0; i < 8; i++) {
     await page.waitForTimeout(900);
     const b = page.getByRole("alertdialog").getByRole("button");
     if (!(await b.count())) break;
-    await b.first().click();
+    // The celebration animates in; click through it without waiting for "stable".
+    await b.first().click({ force: true, timeout: 4000 }).catch(() => b.first().evaluate((el) => el.click()).catch(() => {}));
   }
 };
 
@@ -122,19 +128,19 @@ const body = await page.locator("body").innerText();
 ok("course page shows full progress", /100%|24\s*\/\s*24|24 of 24/.test(body));
 await page.screenshot({ path: path.join(SHOTS, "course-complete.png"), fullPage: true });
 
-// Phone-size pass: no horizontal overflow, axe clean on first lesson.
-const phone = await browser.newContext({ ...devices["iPhone 13"] });
+// Phone-size pass with the SAME signed-in learner: real lesson content must render, not overflow, and pass axe.
+const state = await ctx.storageState();
+const phone = await browser.newContext({ ...devices["iPhone 13"], storageState: state });
 const mp = await phone.newPage();
-await mp.goto(`${BASE}/lesson/cm-welcome`);
-const redirected = !mp.url().includes("/lesson/cm-welcome");
-if (!redirected) {
+for (const id of ["cm-welcome", "cm-models", "cm-playbook"]) {
+  await mp.goto(`${BASE}/lesson/${id}`);
+  const h1 = await mp.getByRole("heading", { level: 1 }).first().innerText({ timeout: 10000 }).catch(() => "");
+  ok(`phone: ${id} shows its real lesson content`, h1.length > 5 && !/Join for/.test(await mp.locator("body").innerText()), h1.slice(0, 50));
+  await mp.waitForTimeout(1300);
   const overflow = await mp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
-  ok("phone: lesson 1 has no horizontal overflow", !overflow);
-  await mp.screenshot({ path: path.join(SHOTS, "phone-lesson1.png"), fullPage: true });
-} else {
-  // Fresh browser context = not signed in; the app correctly protects lessons. Check the public landing page overflow instead.
-  await mp.goto(BASE);
-  ok("phone: public pages redirect signed-out learners and the landing page does not overflow", await mp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
+  ok(`phone: ${id} has no horizontal overflow`, !overflow);
+  await axe(`phone ${id}`, mp);
+  await mp.screenshot({ path: path.join(SHOTS, `phone-${id}.png`), fullPage: true });
 }
 await phone.close();
 
