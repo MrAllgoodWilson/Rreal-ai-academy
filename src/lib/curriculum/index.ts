@@ -1,10 +1,13 @@
 import { TRACKS as PROGRAM } from "./tracks";
-import { COURSES } from "./courses";
+import { COURSES as BASE_COURSES } from "./courses";
+import { CHATGPT_INCOME_COURSES } from "./chatgpt-income-courses";
+
+export const COURSES = [...BASE_COURSES, ...CHATGPT_INCOME_COURSES];
 import { PLAYBOOKS, getPlaybook } from "./playbooks";
 import type { Block, Lesson, Module, Playbook, Track, Week } from "./types";
 
 export type { Block, Lesson, Module, Playbook, Track, Week };
-export { PLAYBOOKS, getPlaybook, COURSES };
+export { PLAYBOOKS, getPlaybook };
 
 /** The 8-week Rreal AI Mastery Program (sequential across its 5 tracks). */
 export const TRACKS: Track[] = PROGRAM.map((t) => ({ ...t, kind: "program" as const }));
