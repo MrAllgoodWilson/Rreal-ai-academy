@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "node tests/e2e/smoke.mjs",
-    "db:seed": "node --experimental-strip-types scripts/generate-seed.mts",
+    "db:seed": "tsx scripts/generate-seed.mts",
     "cf:build": "opennextjs-cloudflare build",
     "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
@@ -43,6 +43,7 @@
     "eslint-config-next": "^15.5.28",
     "postcss": "8.4.49",
     "tailwindcss": "3.4.15",
+    "tsx": "4.23.15",
     "typescript": "5.6.3",
     "vitest": "2.1.5",
     "wrangler": "^4.157.0"
