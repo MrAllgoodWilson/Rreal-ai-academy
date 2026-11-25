@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { getStripe, verifyWebhook } from "@/lib/stripe";
+import { getStripe, verifyWebhook, MONTHLY_PRICE_ID } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { processReferralPaymentEvent } from "@/lib/referrals-server";
 import { CREDIT_PACKS, packByPaymentLink } from "@/lib/credits";
@@ -52,6 +52,12 @@ export async function POST(req: Request) {
     throw new Error(`${what} failed: ${error.message ?? error.code ?? "unknown"}`);
   };
 
+  /** A subscription counts as membership only if it is for the monthly membership price. Subscriptions without item data (Payment Link path) can't be checked and pass. */
+  const isMembershipPrice = (sub: { items?: { data?: { price?: { id?: string } }[] } }) => {
+    const ids = (sub.items?.data ?? []).map((i) => i.price?.id).filter(Boolean);
+    return ids.length === 0 || ids.includes(MONTHLY_PRICE_ID);
+  };
+
   const upsert = async (row: Record<string, unknown>) => {
     const { error } = await admin.from("subscriptions").upsert({ ...row, updated_at: new Date().toISOString() }, { onConflict: "stripe_subscription_id" });
     orThrow("membership save", error);
@@ -82,6 +88,7 @@ export async function POST(req: Request) {
         const stripe = getStripe();
         if (stripe) {
           const sub = await stripe.subscriptions.retrieve(subId);
+          if (!isMembershipPrice(sub)) { console.error("Stripe webhook: subscription is not the membership price, ignored", event.id); break; }
           await upsert({ user_id: s.client_reference_id, stripe_customer_id: customerId(sub.customer), stripe_subscription_id: sub.id, status: sub.status, plan: "monthly", current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null, cancel_at_period_end: sub.cancel_at_period_end });
         } else {
           // Payment Link without API key: payment completed ⇒ membership active.
@@ -100,6 +107,7 @@ export async function POST(req: Request) {
         const sub = event.data.object as Stripe.Subscription;
         const userId = await resolveUser(sub as never);
         if (!userId || !ACTIVE.has(sub.status)) break;
+        if (!isMembershipPrice(sub)) { console.error("Stripe webhook: subscription is not the membership price, ignored", event.id); break; }
         await upsert({ user_id: userId, stripe_customer_id: customerId(sub.customer), stripe_subscription_id: sub.id, status: sub.status, plan: "monthly", current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null, cancel_at_period_end: sub.cancel_at_period_end });
         break;
       }
