@@ -189,6 +189,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <footer className="border-t border-line/50 py-8 text-sm text-muted">
           <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <p>© {new Date().getFullYear()} Rreal AI Academy.</p>
+            <address style={{ fontStyle: "normal" }}>8753 Dunwoody Place, STE 300, Atlanta, GA 30350<br /><a href="tel:+18449242588">(844) 924-2588</a></address>
             <nav aria-label="Footer">
               <ul className="flex flex-wrap gap-x-5 gap-y-2">
                 <li><Link href="/pricing" className="hover:text-ink">Pricing</Link></li>
