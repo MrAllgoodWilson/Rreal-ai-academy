@@ -1,0 +1,74 @@
+# Rreal AI Academy CI: the same checks CLAUDE.md requires before every commit, run on every PR and push.
+# Least privilege: read-only token, no secrets, no deployment, no pull_request_target.
+# Third-party actions are pinned to reviewed commit SHAs (tags are mutable); bump deliberately and re-review.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, feature/v0.2-launch, "release/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, lint, unit tests, seed freshness
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Node 22 (db:seed needs --experimental-strip-types, Node >= 22.6)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install (exact lockfile)
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm test
+      - name: Seed is up to date with the curriculum
+        # supabase/seed.sql is GENERATED from the curriculum. If this fails, run `npm run db:seed` and commit the result;
+        # never hand-merge seed.sql. It also catches a course silently dropped from the seed during a merge.
+        run: |
+          npm run db:seed
+          git diff --exit-code -- supabase/seed.sql
+
+  build:
+    name: Production build (demo mode, no secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install (exact lockfile)
+        run: npm ci --no-audit --no-fund
+      - name: Build (one retry, because fonts download at build time)
+        # Root cause of the rare first-attempt failure seen in testing: the build fetches Google Fonts over the network.
+        # A real compile/type error fails both attempts. Removing the network dependency (self-hosted fonts) is a product
+        # change and is deliberately not made here.
+        run: |
+          for attempt in 1 2; do
+            if npm run build; then exit 0; fi
+            echo "::warning::build attempt ${attempt} failed; retrying once (font download is a network call)"
+            sleep 15
+          done
+          exit 1
