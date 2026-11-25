@@ -79,7 +79,7 @@ describe("checkout route", () => {
     st.liveSub = true;
     const res = await postCheckout();
     expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ code: "already_subscribed" });
+    expect(await res.json()).toMatchObject({ code: "already_subscribed", error: expect.stringContaining("in Settings") });
     expect(calls.sessions).toHaveLength(0);
   });
 });
