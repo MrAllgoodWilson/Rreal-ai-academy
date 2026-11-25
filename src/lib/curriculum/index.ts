@@ -1,8 +1,9 @@
 import { TRACKS as PROGRAM } from "./tracks";
 import { COURSES as BASE_COURSES } from "./courses";
 import { CHATGPT_INCOME_COURSES } from "./chatgpt-income-courses";
+import { MANUS_DIY_COURSES } from "./manus-diy-courses";
 
-export const COURSES = [...BASE_COURSES, ...CHATGPT_INCOME_COURSES];
+export const COURSES = [...BASE_COURSES, ...CHATGPT_INCOME_COURSES, ...MANUS_DIY_COURSES];
 import { PLAYBOOKS, getPlaybook } from "./playbooks";
 import type { Block, Lesson, Module, Playbook, Track, Week } from "./types";
 
