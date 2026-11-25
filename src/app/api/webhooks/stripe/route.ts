@@ -11,7 +11,7 @@ const ACTIVE = new Set(["active", "trialing", "past_due", "canceled", "unpaid", 
 /**
  * Stripe webhook: verifies the signature, then idempotently mirrors membership state into Postgres.
  * Works for Checkout Sessions (API key) and Payment Links (client_reference_id = user id).
- * Events: checkout.session.completed, checkout.session.async_payment_succeeded, customer.subscription.created|updated|deleted
+ * Events: checkout.session.completed, checkout.session.async_payment_succeeded, customer.subscription.created|updated|deleted, charge.refunded, charge.dispute.created
  */
 export async function POST(req: Request) {
   const admin = getSupabaseAdmin();
@@ -63,11 +63,43 @@ export async function POST(req: Request) {
     orThrow("membership save", error);
   };
 
+  /** Which credit pack a one-time Checkout Session bought, if any. */
+  const packOf = (s: Stripe.Checkout.Session) => {
+    const link = typeof s.payment_link === "string" ? s.payment_link : s.payment_link?.id;
+    return packByPaymentLink(link) ?? CREDIT_PACKS.find((p) => p.kind === s.metadata?.credit_kind && String(p.qty) === s.metadata?.credit_qty);
+  };
+
+  /**
+   * A fully refunded charge or a new dispute on a credit-pack payment takes the credits back (idempotent per session).
+   * Partial refunds are ignored on purpose (no way to know how many credits they stand for). Subscription charges are not credit packs and are skipped.
+   */
+  const reverseCreditPack = async (ev: Stripe.Event) => {
+    const stripe = getStripe();
+    if (!stripe) return;
+    let charge: Stripe.Charge;
+    if (ev.type === "charge.refunded") {
+      charge = ev.data.object as Stripe.Charge;
+      if (!charge.refunded) return;
+    } else {
+      const d = ev.data.object as Stripe.Dispute;
+      const chargeId = typeof d.charge === "string" ? d.charge : d.charge?.id;
+      if (!chargeId) return;
+      charge = await stripe.charges.retrieve(chargeId);
+    }
+    const pi = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
+    if (!pi) return;
+    const sessions = await stripe.checkout.sessions.list({ payment_intent: pi, limit: 1 });
+    const s = sessions.data[0];
+    if (!s || s.mode !== "payment" || !packOf(s)) return;
+    const { data, error } = await admin.rpc("reverse_credits", { p_ref: s.id });
+    orThrow("credit reversal", error);
+    if (data && (data as { shortfall?: number }).shortfall) console.error("Stripe webhook: credits already spent, partial reversal", event.id, data);
+  };
+
   /** One-time credit pack paid → wallet credit, once per Checkout Session (grant_credits is idempotent on the session id). */
   const fulfillPack = async (s: Stripe.Checkout.Session) => {
     if (s.mode !== "payment" || !s.client_reference_id || s.payment_status !== "paid") return false;
-    const link = typeof s.payment_link === "string" ? s.payment_link : s.payment_link?.id;
-    const pack = packByPaymentLink(link) ?? CREDIT_PACKS.find((p) => p.kind === s.metadata?.credit_kind && String(p.qty) === s.metadata?.credit_qty);
+    const pack = packOf(s);
     if (!pack) return true; // a payment that isn't one of our packs
     const { error } = await admin.rpc("grant_credits", { p_user: s.client_reference_id, p_kind: pack.kind, p_qty: pack.qty, p_reason: "purchase", p_ref: s.id });
     orThrow("credit grant", error);
@@ -94,6 +126,11 @@ export async function POST(req: Request) {
           // Payment Link without API key: payment completed ⇒ membership active.
           await upsert({ user_id: s.client_reference_id, stripe_customer_id: customerId(s.customer), stripe_subscription_id: subId, status: s.payment_status === "paid" ? "active" : "incomplete", plan: "monthly" });
         }
+        break;
+      }
+      case "charge.refunded":
+      case "charge.dispute.created": {
+        await reverseCreditPack(event);
         break;
       }
       case "checkout.session.async_payment_succeeded": {
