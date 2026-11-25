@@ -28,6 +28,7 @@ const call = () => POST(new Request("http://x/api/webhooks/stripe", { method: "P
 const packSession = (over: Record<string, unknown> = {}) => ({ id: "cs_pack", mode: "payment", metadata: { credit_kind: "video", credit_qty: "5" }, ...over });
 const refund = (over: Record<string, unknown> = {}) => ({ id: "evt_r", type: "charge.refunded", data: { object: { id: "ch_1", refunded: true, payment_intent: "pi_1", ...over } } });
 const dispute = { id: "evt_d", type: "charge.dispute.created", data: { object: { id: "dp_1", charge: "ch_1" } } };
+const closed = (status: string) => ({ id: "evt_c", type: "charge.dispute.closed", data: { object: { id: "dp_1", charge: "ch_1", status } } });
 
 beforeEach(() => {
   process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
@@ -78,5 +79,32 @@ describe("credit pack reversal", () => {
     st.rpcError = { code: "XX000", message: "db down" };
     expect((await call()).status).toBe(500);
     expect(st.deleted).toContain("webhook_events:evt_r");
+  });
+
+  it("re-grants what was taken when a dispute is won", async () => {
+    event = closed("won");
+    expect((await call()).status).toBe(200);
+    expect(st.rpc).toEqual([{ name: "restore_credits", args: { p_ref: "cs_pack" } }]);
+  });
+  it("does nothing when a dispute is lost or still open", async () => {
+    event = closed("lost");
+    expect((await call()).status).toBe(200);
+    event = closed("warning_closed");
+    expect((await call()).status).toBe(200);
+    expect(st.rpc).toHaveLength(0);
+  });
+  it("does not restore for a subscription charge or a non-pack payment", async () => {
+    st.sessions = [packSession({ mode: "subscription" })];
+    event = closed("won");
+    expect((await call()).status).toBe(200);
+    st.sessions = [packSession({ metadata: {} })];
+    expect((await call()).status).toBe(200);
+    expect(st.rpc).toHaveLength(0);
+  });
+  it("returns 500 and un-reserves the event when the restore fails, so Stripe retries", async () => {
+    st.rpcError = { code: "XX000", message: "db down" };
+    event = closed("won");
+    expect((await call()).status).toBe(500);
+    expect(st.deleted).toContain("webhook_events:evt_c");
   });
 });

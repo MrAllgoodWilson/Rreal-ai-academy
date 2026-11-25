@@ -11,7 +11,7 @@ const ACTIVE = new Set(["active", "trialing", "past_due", "canceled", "unpaid", 
 /**
  * Stripe webhook: verifies the signature, then idempotently mirrors membership state into Postgres.
  * Works for Checkout Sessions (API key) and Payment Links (client_reference_id = user id).
- * Events: checkout.session.completed, checkout.session.async_payment_succeeded, customer.subscription.created|updated|deleted, charge.refunded, charge.dispute.created
+ * Events: checkout.session.completed, checkout.session.async_payment_succeeded, customer.subscription.created|updated|deleted, charge.refunded, charge.dispute.created, charge.dispute.closed
  */
 export async function POST(req: Request) {
   const admin = getSupabaseAdmin();
@@ -69,31 +69,50 @@ export async function POST(req: Request) {
     return packByPaymentLink(link) ?? CREDIT_PACKS.find((p) => p.kind === s.metadata?.credit_kind && String(p.qty) === s.metadata?.credit_qty);
   };
 
+  /** The credit-pack Checkout Session a charge paid for, or null (subscription charges, other payments, no Stripe client). */
+  const packSessionForCharge = async (charge: Stripe.Charge) => {
+    const stripe = getStripe();
+    if (!stripe) return null;
+    const pi = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
+    if (!pi) return null;
+    const sessions = await stripe.checkout.sessions.list({ payment_intent: pi, limit: 1 });
+    const s = sessions.data[0];
+    return s && s.mode === "payment" && packOf(s) ? s : null;
+  };
+
+  const chargeOfDispute = async (d: Stripe.Dispute) => {
+    const chargeId = typeof d.charge === "string" ? d.charge : d.charge?.id;
+    const stripe = getStripe();
+    return chargeId && stripe ? stripe.charges.retrieve(chargeId) : null;
+  };
+
   /**
    * A fully refunded charge or a new dispute on a credit-pack payment takes the credits back (idempotent per session).
    * Partial refunds are ignored on purpose (no way to know how many credits they stand for). Subscription charges are not credit packs and are skipped.
    */
   const reverseCreditPack = async (ev: Stripe.Event) => {
-    const stripe = getStripe();
-    if (!stripe) return;
-    let charge: Stripe.Charge;
+    let charge: Stripe.Charge | null;
     if (ev.type === "charge.refunded") {
       charge = ev.data.object as Stripe.Charge;
       if (!charge.refunded) return;
     } else {
-      const d = ev.data.object as Stripe.Dispute;
-      const chargeId = typeof d.charge === "string" ? d.charge : d.charge?.id;
-      if (!chargeId) return;
-      charge = await stripe.charges.retrieve(chargeId);
+      charge = await chargeOfDispute(ev.data.object as Stripe.Dispute);
     }
-    const pi = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
-    if (!pi) return;
-    const sessions = await stripe.checkout.sessions.list({ payment_intent: pi, limit: 1 });
-    const s = sessions.data[0];
-    if (!s || s.mode !== "payment" || !packOf(s)) return;
+    const s = charge ? await packSessionForCharge(charge) : null;
+    if (!s) return;
     const { data, error } = await admin.rpc("reverse_credits", { p_ref: s.id });
     orThrow("credit reversal", error);
     if (data && (data as { shortfall?: number }).shortfall) console.error("Stripe webhook: credits already spent, partial reversal", event.id, data);
+  };
+
+  /** A dispute we won gives back exactly what the earlier reversal took (idempotent; credits that were never taken back are not touched). */
+  const restoreCreditPack = async (d: Stripe.Dispute) => {
+    if (d.status !== "won") return;
+    const charge = await chargeOfDispute(d);
+    const s = charge ? await packSessionForCharge(charge) : null;
+    if (!s) return;
+    const { error } = await admin.rpc("restore_credits", { p_ref: s.id });
+    orThrow("credit restore", error);
   };
 
   /** One-time credit pack paid → wallet credit, once per Checkout Session (grant_credits is idempotent on the session id). */
@@ -131,6 +150,10 @@ export async function POST(req: Request) {
       case "charge.refunded":
       case "charge.dispute.created": {
         await reverseCreditPack(event);
+        break;
+      }
+      case "charge.dispute.closed": {
+        await restoreCreditPack(event.data.object as Stripe.Dispute);
         break;
       }
       case "checkout.session.async_payment_succeeded": {
