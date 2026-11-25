@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MANUS_DIY_COURSES } from "@/lib/curriculum/manus-diy-courses";
 import { lockReason } from "@/lib/curriculum";
 
-describe("Manus 100 DIY Courses Catalog & Gating", () => {
+describe("Manus 100 DIY Courses Catalog, Quizzes, Capstone & Gating", () => {
   it("imports exactly 100 DIY tracks", () => {
     expect(MANUS_DIY_COURSES.length).toBe(100);
   });
@@ -25,7 +25,7 @@ describe("Manus 100 DIY Courses Catalog & Gating", () => {
     }
   });
 
-  it("verifies quizzes are valid with correct answer boundaries", () => {
+  it("verifies all 600 source quizzes are preserved with valid answer boundaries", () => {
     let quizCount = 0;
     const allLessons = MANUS_DIY_COURSES.flatMap((t) => t.weeks.flatMap((w) => w.modules.flatMap((m) => m.lessons)));
     for (const l of allLessons) {
@@ -40,7 +40,22 @@ describe("Manus 100 DIY Courses Catalog & Gating", () => {
         }
       }
     }
-    expect(quizCount).toBe(400);
+    expect(quizCount).toBe(600);
+  });
+
+  it("verifies all 100 courses have a capstone project lab", () => {
+    let capstoneCount = 0;
+    const allLessons = MANUS_DIY_COURSES.flatMap((t) => t.weeks.flatMap((w) => w.modules.flatMap((m) => m.lessons)));
+    for (const l of allLessons) {
+      const labs = l.blocks.filter((b) => b.type === "prompt-lab");
+      for (const lab of labs) {
+        if (lab.type === "prompt-lab" && lab.goal.includes("Capstone Deliverable")) {
+          capstoneCount++;
+          expect(lab.minScore).toBe(70);
+        }
+      }
+    }
+    expect(capstoneCount).toBe(100);
   });
 
   it("enforces $1/month paid subscriber gating for DIY courses", () => {
