@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   const parsed = z.object({ identifier: z.string().min(1).max(254), password: z.string().min(1).max(200) }).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Enter your username/email and password." }, { status: 400 });
 
-  const sb = getSupabaseServer();
+  const sb = await getSupabaseServer();
   if (!sb) return NextResponse.json({ error: "Auth backend not configured." }, { status: 501 });
   const generic = NextResponse.json({ error: "That username/email and password don't match." }, { status: 401 });
 

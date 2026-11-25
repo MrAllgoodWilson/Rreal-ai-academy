@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { RequireAuth } from "@/components/RequireAuth";
+import { RequireMember } from "@/components/RequireAuth";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QuizBlock } from "@/components/LessonBlocks";
 import { ProgressBar } from "@/components/ui/ProgressRing";
@@ -76,11 +76,11 @@ function Review() {
 
 export default function ReviewPage() {
   return (
-    <RequireAuth>
+    <RequireMember>
       <div className="mx-auto max-w-3xl px-4 py-10">
         <PageHeader eyebrow="Daily Review" title="Keep it fresh" subtitle="5 quick questions from what you’ve learned — chosen by spaced repetition." />
         <Review />
       </div>
-    </RequireAuth>
+    </RequireMember>
   );
 }

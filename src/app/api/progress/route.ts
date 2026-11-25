@@ -4,7 +4,7 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 
 /** GET: full learner state (account, progress, subscription) from Supabase. PUT: save non-authoritative UI state. */
 export async function GET() {
-  const sb = getSupabaseServer();
+  const sb = await getSupabaseServer();
   if (!sb) return NextResponse.json({ error: "Not configured" }, { status: 501 });
   const { data: auth } = await sb.auth.getUser();
   if (!auth.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -47,7 +47,7 @@ export async function GET() {
 const Put = z.object({ state: z.record(z.unknown()) });
 
 export async function PUT(req: Request) {
-  const sb = getSupabaseServer();
+  const sb = await getSupabaseServer();
   if (!sb) return NextResponse.json({ error: "Not configured" }, { status: 501 });
   const { data: auth } = await sb.auth.getUser();
   if (!auth.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

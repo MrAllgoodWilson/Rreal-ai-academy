@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { RequireAuth } from "@/components/RequireAuth";
+import { RequireMember } from "@/components/RequireAuth";
 import { A11ySettings } from "@/components/A11yPanel";
 import { useAcademy } from "@/lib/store";
 import { TRACKS } from "@/lib/curriculum";
@@ -122,8 +122,8 @@ function Flow() {
 
 export default function OnboardingPage() {
   return (
-    <RequireAuth>
+    <RequireMember>
       <Flow />
-    </RequireAuth>
+    </RequireMember>
   );
 }

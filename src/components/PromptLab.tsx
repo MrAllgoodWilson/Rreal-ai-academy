@@ -6,6 +6,7 @@ import { Check, Loader2, Play, Save, Sparkles, X, Copy } from "lucide-react";
 import { gradePrompt } from "@/lib/prompt-grader";
 import { useAcademy } from "@/lib/store";
 import { useA11y } from "@/lib/a11y";
+import { apiHeaders } from "@/lib/byok";
 
 export interface LabResult {
   score: number;
@@ -43,7 +44,7 @@ export function PromptLab({ goal, starter = "", minScore = 0, onResult, saveTitl
     setCritique("");
     recordPromptScore(grade.score);
     try {
-      const res = await fetch("/api/sandbox", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt, goal }) });
+      const res = await fetch("/api/sandbox", { method: "POST", headers: apiHeaders(), body: JSON.stringify({ prompt, goal }) });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Sandbox error");
       setOutput(json.output);

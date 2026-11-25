@@ -5,9 +5,9 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { supabaseConfigured } from "@/lib/config";
 
 /** Per-request Supabase client acting as the signed-in user (RLS applies). */
-export function getSupabaseServer(): SupabaseClient | null {
+export async function getSupabaseServer(): Promise<SupabaseClient | null> {
   if (!supabaseConfigured) return null;
-  const store = cookies();
+  const store = await cookies();
   return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     cookies: {
       getAll: () => store.getAll(),

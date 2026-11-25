@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Accessibility, ArrowRight, BadgeCheck, Captions, Check, Clapperboard, Ear, Eye, FlaskConical, Mic, Minus, ShieldCheck, Sparkles, Trophy, Zap } from "lucide-react";
-import { TRACKS, ALL_LESSONS } from "@/lib/curriculum";
+import { TRACKS, ALL_LESSONS, ALL_TRACKS } from "@/lib/curriculum";
 import { useAcademy } from "@/lib/store";
 
 const fade = { initial: { opacity: 0, y: 24 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, margin: "-80px" }, transition: { duration: 0.5 } };
 
 const FEATURES = [
+  { icon: Sparkles, title: "Ask for ANY course", body: "Describe what you want to learn and the AI builds a full course for you — then shares the best ones with everyone." },
+  { icon: Clapperboard, title: "Playbooks: make anything", body: "Step-by-step guides for TikToks, ads, flyers, logos and websites — including exactly which tools to sign up for." },
   { icon: Mic, title: "Rreal Coach — talk to your tutor", body: "Two-way voice coaching with a live waveform and synchronized captions. Ask anything, get graded, practice out loud." },
   { icon: FlaskConical, title: "Live Prompt Sandbox", body: "Type a prompt, get an instant Prompt Quality Score with line-by-line coaching. Zero installs, zero setup." },
   { icon: Clapperboard, title: "Social Video Studio", body: "Hooks → script → scene storyboard → captioned 9:16 preview → posting calendar export. A real creator pipeline." },
@@ -49,7 +51,7 @@ export default function Home() {
       <section className="grid grid-cols-1 items-center gap-12 py-12 sm:py-16 lg:grid-cols-[1.1fr_0.9fr] lg:py-24 [&>*]:min-w-0" aria-labelledby="hero-title">
         <div>
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="chip mb-6 border-neon/40 text-neon">
-            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> {ALL_LESSONS.length} interactive lessons · 5 tracks · 8 weeks
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> {ALL_TRACKS.length} courses · {ALL_LESSONS.length} lessons · English & Español · $1/month
           </motion.p>
           <motion.h1 id="hero-title" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="font-display text-[2.5rem] font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
             Go from <span className="heading-gradient">“what is AI?”</span> to AI expert.
@@ -59,12 +61,12 @@ export default function Home() {
           </motion.p>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="mt-8 flex flex-wrap gap-3">
             <Link href={cta} className="btn-primary text-lg">
-              {user ? "Continue learning" : "Start Week 1 free"} <ArrowRight className="h-5 w-5" aria-hidden="true" />
+              {user ? "Continue learning" : "Join for $1/month"} <ArrowRight className="h-5 w-5" aria-hidden="true" />
             </Link>
             <Link href="/pricing" className="btn-ghost text-lg">See plans</Link>
           </motion.div>
           <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted">
-            <li className="flex items-center gap-2"><Check className="h-4 w-4 text-lime" aria-hidden="true" /> No credit card for Week 1</li>
+            <li className="flex items-center gap-2"><Check className="h-4 w-4 text-lime" aria-hidden="true" /> Every course & tool for $1/month</li>
             <li className="flex items-center gap-2"><Check className="h-4 w-4 text-lime" aria-hidden="true" /> Built for screen readers & captions</li>
             <li className="flex items-center gap-2"><Check className="h-4 w-4 text-lime" aria-hidden="true" /> Cancel anytime</li>
           </ul>
@@ -209,9 +211,9 @@ export default function Home() {
       {/* CTA */}
       <motion.section {...fade} className="py-20 text-center" aria-labelledby="cta-title">
         <h2 id="cta-title" className="font-display text-4xl font-bold sm:text-5xl">Your first AI win is 6 minutes away.</h2>
-        <p className="mx-auto mt-4 max-w-xl text-muted">Week 1 is free. No credit card. No jargon. Just you, your coach, and your first great prompt.</p>
+        <p className="mx-auto mt-4 max-w-xl text-muted">Every course, playbook, tool and certificate for $1 a month. In English and Spanish. Cancel anytime.</p>
         <Link href={cta} className="btn-primary mt-8 text-lg">
-          {user ? "Back to my dashboard" : "Create my free account"} <ArrowRight className="h-5 w-5" aria-hidden="true" />
+          {user ? "Back to my dashboard" : "Join for $1/month"} <ArrowRight className="h-5 w-5" aria-hidden="true" />
         </Link>
       </motion.section>
     </div>

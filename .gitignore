@@ -8,3 +8,7 @@ out
 next-env.d.ts
 coverage
 .vercel
+.open-next
+.wrangler
+.dev.vars
+drafts/

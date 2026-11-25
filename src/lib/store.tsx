@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { ALL_LESSONS, TRACKS, getLessonRef, lessonsForTrack } from "@/lib/curriculum";
+import { ALL_LESSONS, ALL_TRACKS, getLessonRef, lessonsForTrack, registerTracks, type Track } from "@/lib/curriculum";
 import { applyActivity, dayKey, levelForXp, streakMultiplier, type StreakState } from "@/lib/gamification";
 import { BADGES, newlyEarned, type BadgeStats } from "@/lib/badges";
 import { getSupabaseBrowser } from "@/lib/supabase/client";
@@ -148,7 +148,7 @@ interface Ctx {
   todayXp: number;
   celebrations: Celebration[];
   dismissCelebration: () => void;
-  signUp: (i: { email: string; username: string; password: string; displayName: string }) => Promise<Result>;
+  signUp: (i: { email: string; username: string; password: string; displayName: string; referralCode?: string }) => Promise<Result>;
   signIn: (i: { identifier: string; password: string }) => Promise<Result>;
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<Result>;
@@ -164,6 +164,10 @@ interface Ctx {
   setOnboarding: (o: Partial<Onboarding>) => void;
   setDailyGoal: (xp: number) => void;
   startTrial: (plan: Subscription["plan"]) => void;
+  /** Bumps whenever custom/community courses are added to the catalog */
+  catalogVersion: number;
+  customCourses: (Track & { status?: string; mine?: boolean })[];
+  addCustomCourse: (t: Track) => void;
   cancelSubscription: () => void;
   resetProgress: () => void;
 }
@@ -176,6 +180,8 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
   const [progress, setProgress] = useState<Progress>(freshProgress);
   const [subscription, setSubscription] = useState<Subscription>({ status: "none" });
   const [celebrations, setCelebrations] = useState<Celebration[]>([]);
+  const [catalogVersion, setCatalogVersion] = useState(0);
+  const [customCourses, setCustomCourses] = useState<(Track & { status?: string; mine?: boolean })[]>([]);
   const progressRef = useRef(progress);
   progressRef.current = progress;
 
@@ -228,6 +234,24 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  /* Load AI-generated + community courses into the catalog */
+  useEffect(() => {
+    if (!ready) return;
+    const apply = (list: (Track & { status?: string; mine?: boolean })[]) => {
+      registerTracks(list);
+      setCustomCourses(list);
+      setCatalogVersion((v) => v + 1);
+    };
+    if (isDemoMode) {
+      if (user) apply(read<Track[]>(`rreal.v1.custom.${user.id}`, []).map((t) => ({ ...t, mine: true, status: "private" })));
+      return;
+    }
+    fetch("/api/courses", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => apply(j.courses ?? []))
+      .catch(() => {});
+  }, [ready, user]);
+
   /* Persist */
   useEffect(() => {
     if (!ready || !user) return;
@@ -252,7 +276,7 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
   /** Recompute badges after any progress mutation */
   const withBadges = useCallback(
     (p: Progress): Progress => {
-      const tracksCompleted = TRACKS.filter((t) => lessonsForTrack(t.id).every((r) => p.completed[r.lesson.id])).map((t) => t.id);
+      const tracksCompleted = ALL_TRACKS.filter((t) => lessonsForTrack(t.id).every((r) => p.completed[r.lesson.id])).map((t) => t.id);
       const stats: BadgeStats = {
         lessonsCompleted: Object.keys(p.completed).length,
         xp: p.xp,
@@ -288,23 +312,32 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
     setSubscription(blob.subscription);
   };
 
-  const signUp: Ctx["signUp"] = async ({ email, username, password, displayName }) => {
+  const signUp: Ctx["signUp"] = async ({ email, username, password, displayName, referralCode }) => {
     email = email.trim().toLowerCase();
     if (!USERNAME_RE.test(username)) return { ok: false, error: "Username must be 3–20 letters, numbers or underscores." };
     const issues = passwordProblems(password);
     if (issues.length) return { ok: false, error: `Password needs ${issues.join(", ")}.` };
     const sb = getSupabaseBrowser();
     if (sb) {
+      // Preferred: server creates a confirmed account and signs in (no email round-trip).
+      const res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, username, password, displayName, referralCode }) });
+      if (res.status !== 501) {
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) return { ok: false, error: json.error ?? "Couldn't create your account." };
+        await sb.auth.refreshSession();
+        return json.signedIn ? { ok: true } : { ok: true, message: "Account created. Please sign in." };
+      }
       const { data: available, error: rpcErr } = await sb.rpc("username_available", { p_username: username });
       if (rpcErr) return { ok: false, error: "Couldn't check that username. Try again." };
       if (!available) return { ok: false, error: "That username is taken. Try another." };
       const { data, error } = await sb.auth.signUp({
         email,
         password,
-        options: { data: { username, display_name: displayName }, emailRedirectTo: `${location.origin}/onboarding` },
+        options: { data: { username, display_name: displayName }, emailRedirectTo: `${location.origin}/subscribe` },
       });
       if (error) return { ok: false, error: error.message };
       if (!data.session) return { ok: true, message: "Check your email to confirm your account, then sign in." };
+      if (process.env.NEXT_PUBLIC_REFERRALS_ENABLED === "true" && referralCode) await sb.rpc("referral_attribute", { p_code: referralCode });
       return { ok: true };
     }
     const accounts = read<StoredAccount[]>(K.accounts, []);
@@ -352,7 +385,8 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
     const msg = "If an account exists for that email, a reset link is on its way. It expires in 1 hour.";
     const sb = getSupabaseBrowser();
     if (sb) {
-      await sb.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/reset-password` });
+      const res = await fetch("/api/auth/reset-request", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }) });
+      if (res.status === 501) await sb.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/reset-password` });
       return { ok: true, message: msg };
     }
     const exists = read<StoredAccount[]>(K.accounts, []).some((a) => a.email === email);
@@ -470,6 +504,14 @@ export function AcademyProvider({ children }: { children: ReactNode }) {
       setSubscription({ status: "trialing", plan, trialEndsAt: ends });
     },
     cancelSubscription: () => setSubscription({ status: "canceled" }),
+    catalogVersion,
+    customCourses,
+    addCustomCourse: (t) => {
+      registerTracks([t]);
+      setCustomCourses((c) => [{ ...t, mine: true, status: "private" }, ...c.filter((x) => x.id !== t.id)]);
+      setCatalogVersion((v) => v + 1);
+      if (isDemoMode && user) write(`rreal.v1.custom.${user.id}`, [t, ...read<Track[]>(`rreal.v1.custom.${user.id}`, []).filter((x) => x.id !== t.id)]);
+    },
     resetProgress: () => setProgress(freshProgress()),
   };
 

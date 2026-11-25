@@ -551,6 +551,10 @@ export const TRACKS: Track[] = [
                     answer: 1,
                     explanation: "Disclosure protects your account and your audience's trust.",
                   },
+                  {
+                    type: "tip",
+                    body: "Ready to publish your films, series or music videos? iFilms Studios (https://ifilmsstudio.pics) gives creators their own channel: publish your catalogue, keep your cut, and reach viewers without fighting the algorithm.",
+                  },
                 ],
               },
             ],

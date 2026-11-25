@@ -1,0 +1,49 @@
+{
+  "reviewedAt": "2026-11-05",
+  "sources": [
+    {
+      "id": "apple-guide",
+      "url": "https://support.apple.com/guide/iphone/welcome/ios"
+    },
+    {
+      "id": "android-version",
+      "url": "https://support.google.com/android/answer/7680439?hl=en"
+    },
+    {
+      "id": "android-backup",
+      "url": "https://support.google.com/android/answer/2819582?hl=en"
+    },
+    {
+      "id": "android-permissions",
+      "url": "https://support.google.com/android/answer/9431959?hl=en"
+    },
+    {
+      "id": "galaxy-update",
+      "url": "https://www.samsung.com/us/support/answer/ANS10002027/"
+    },
+    {
+      "id": "apple-access",
+      "url": "https://www.apple.com/accessibility/features/"
+    },
+    {
+      "id": "android-speech",
+      "url": "https://support.google.com/accessibility/android/answer/7349565?hl=en-GB"
+    },
+    {
+      "id": "apple-scams",
+      "url": "https://support.apple.com/en-ie/102568"
+    },
+    {
+      "id": "pixel-emergency",
+      "url": "https://support.google.com/pixelphone/answer/7055029?hl=en"
+    },
+    {
+      "id": "gemini-availability",
+      "url": "https://support.google.com/gemini/answer/14579026?hl=en"
+    },
+    {
+      "id": "galaxy-search",
+      "url": "https://www.samsung.com/us/support/answer/ANS10000939/"
+    }
+  ]
+}
