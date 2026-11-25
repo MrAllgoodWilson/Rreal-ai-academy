@@ -14,6 +14,10 @@ export async function POST(req: Request) {
   const { data: auth } = await sb.auth.getUser();
   if (!auth.user) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
 
+  // Never open a second checkout for someone who already has a live membership (they would pay twice). Send them to the billing portal instead.
+  const { data: live } = await sb.from("subscriptions").select("status").eq("user_id", auth.user.id).in("status", ["active", "trialing", "past_due"]).limit(1).maybeSingle();
+  if (live) return NextResponse.json({ error: "You already have a membership. Manage it from your billing page.", code: "already_subscribed" }, { status: 409 });
+
   const site = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin;
   const stripe = getStripe();
   if (stripe) {

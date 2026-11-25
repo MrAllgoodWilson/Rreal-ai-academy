@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Route-level QA for the $1/month paid signup. No network, no real Stripe or Supabase: both are mocked.
 const calls = { sessions: [] as Record<string, unknown>[], inserted: [] as string[], upserts: [] as Record<string, unknown>[] };
-const st = { user: null as null | { id: string; email: string }, existingCustomer: null as null | string, supabase: true, dup: false, verifyThrows: false, event: {} as unknown };
+const st = { liveSub: false, subPrice: "price_test_monthly", user: null as null | { id: string; email: string }, existingCustomer: null as null | string, supabase: true, dup: false, verifyThrows: false, event: {} as unknown };
 
 vi.mock("@/lib/stripe", () => ({
   MONTHLY_PRICE_ID: "price_test_monthly",
   getStripe: () => ({
     checkout: { sessions: { create: async (a: Record<string, unknown>) => (calls.sessions.push(a), { url: "https://checkout.stripe.test/s" }) } },
-    subscriptions: { retrieve: async () => ({ id: "sub_1", customer: "cus_1", status: "active", current_period_end: 1900000000, cancel_at_period_end: false }) },
+    subscriptions: { retrieve: async () => ({ items: { data: [{ price: { id: st.subPrice } }] }, id: "sub_1", customer: "cus_1", status: "active", current_period_end: 1900000000, cancel_at_period_end: false }) },
   }),
   verifyWebhook: async () => { if (st.verifyThrows) throw new Error("bad sig"); return st.event; },
 }));
@@ -16,7 +16,10 @@ vi.mock("@/lib/referrals-server", () => ({ processReferralPaymentEvent: async ()
 vi.mock("@/lib/supabase/server", () => ({
   getSupabaseServer: async () => !st.supabase ? null : {
     auth: { getUser: async () => ({ data: { user: st.user } }) },
-    from: () => ({ select: () => ({ eq: () => ({ not: () => ({ limit: () => ({ maybeSingle: async () => ({ data: st.existingCustomer ? { stripe_customer_id: st.existingCustomer } : null }) }) }) }) }) }),
+    from: () => ({ select: () => ({ eq: () => ({
+      in: () => ({ limit: () => ({ maybeSingle: async () => ({ data: st.liveSub ? { status: "active" } : null }) }) }),
+      not: () => ({ limit: () => ({ maybeSingle: async () => ({ data: st.existingCustomer ? { stripe_customer_id: st.existingCustomer } : null }) }) }),
+    }) }) }),
   },
   getSupabaseAdmin: () => ({
     from: (t: string) => ({
@@ -37,7 +40,7 @@ const subEvent = (id = "evt_a") => ({ id, type: "checkout.session.completed", da
 
 beforeEach(() => {
   Object.assign(calls, { sessions: [], inserted: [], upserts: [] });
-  Object.assign(st, { user: { id: "user-1", email: "a@example.com" }, existingCustomer: null, supabase: true, dup: false, verifyThrows: false, event: subEvent() });
+  Object.assign(st, { liveSub: false, subPrice: "price_test_monthly", user: { id: "user-1", email: "a@example.com" }, existingCustomer: null, supabase: true, dup: false, verifyThrows: false, event: subEvent() });
   process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
   delete process.env.NEXT_PUBLIC_SITE_URL;
 });
@@ -72,8 +75,13 @@ describe("checkout route", () => {
     expect(s.customer).toBe("cus_old");
     expect(s.customer_email).toBeUndefined();
   });
-  // KNOWN GAP (reported to Leroy/Ant): the route does not check for an already-active subscription, so a member can start a second checkout and pay twice.
-  it.todo("refuses to open a second checkout for a learner who already has an active or trialing subscription");
+  it("refuses a second checkout (409) for a learner who already has a live membership, and creates no session", async () => {
+    st.liveSub = true;
+    const res = await postCheckout();
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "already_subscribed" });
+    expect(calls.sessions).toHaveLength(0);
+  });
 });
 
 describe("webhook route negatives", () => {
@@ -105,6 +113,19 @@ describe("webhook route negatives", () => {
     expect((await postHook()).status).toBe(200);
     expect(calls.upserts).toHaveLength(0);
   });
-  // KNOWN GAP: handlers do not verify the subscription's price matches MONTHLY_PRICE_ID, so any subscription on the same Stripe account tagged with a user id would grant membership.
-  it.todo("ignores subscriptions whose price is not the configured monthly price");
+  it("ignores a subscription on a different price (no membership granted, still acknowledged)", async () => {
+    st.subPrice = "price_other_product";
+    expect((await postHook()).status).toBe(200);
+    expect(calls.upserts).toHaveLength(0);
+  });
+  it("ignores a customer.subscription.updated event for a different price", async () => {
+    st.event = { id: "evt_c", type: "customer.subscription.updated", data: { object: { id: "sub_9", customer: "cus_9", status: "active", metadata: { user_id: "user-1" }, items: { data: [{ price: { id: "price_other_product" } }] } } } };
+    expect((await postHook()).status).toBe(200);
+    expect(calls.upserts).toHaveLength(0);
+  });
+  it("still activates a customer.subscription.updated event for the monthly price", async () => {
+    st.event = { id: "evt_d", type: "customer.subscription.updated", data: { object: { id: "sub_9", customer: "cus_9", status: "active", metadata: { user_id: "user-1" }, items: { data: [{ price: { id: "price_test_monthly" } }] } } } };
+    expect((await postHook()).status).toBe(200);
+    expect(calls.upserts[0]).toMatchObject({ user_id: "user-1", stripe_subscription_id: "sub_9", status: "active" });
+  });
 });
