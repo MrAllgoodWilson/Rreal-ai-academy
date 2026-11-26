@@ -17,11 +17,11 @@ export const REFUND_POLICY = {
 } as const;
 
 export type RefundKind = "first_charge" | "credit_pack" | "duplicate_charge" | "other";
-export const REFUND_KINDS: { value: RefundKind; label: string }[] = [
-  { value: "first_charge", label: "My first monthly membership charge" },
-  { value: "credit_pack", label: "A credit pack I have not used" },
-  { value: "duplicate_charge", label: "I was charged twice or by mistake" },
-  { value: "other", label: "Something else" },
+export const REFUND_KINDS: { value: RefundKind; label: string; labelEs: string }[] = [
+  { value: "first_charge", label: "My first monthly membership charge", labelEs: "Mi primer cargo mensual de membresía" },
+  { value: "credit_pack", label: "A credit pack I have not used", labelEs: "Un paquete de créditos que no he usado" },
+  { value: "duplicate_charge", label: "I was charged twice or by mistake", labelEs: "Me cobraron dos veces o por error" },
+  { value: "other", label: "Something else", labelEs: "Otra cosa" },
 ];
 
 const DAY = 86_400_000;

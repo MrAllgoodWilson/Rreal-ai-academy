@@ -43,3 +43,10 @@ describe("validateRefundRequest", () => {
     expect(validateRefundRequest("text").ok).toBe(false);
   });
 });
+
+describe("Spanish labels", () => {
+  it("every refund kind has a Spanish label", async () => {
+    const { REFUND_KINDS } = await import("@/lib/refund-policy");
+    for (const k of REFUND_KINDS) expect(k.labelEs.length).toBeGreaterThan(3);
+  });
+});

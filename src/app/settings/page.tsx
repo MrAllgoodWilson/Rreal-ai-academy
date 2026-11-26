@@ -109,8 +109,8 @@ function Settings() {
         </section>
 
         <section className="card space-y-4" aria-labelledby="refund-h">
-          <h2 id="refund-h" className="font-display text-xl font-semibold">Refunds</h2>
-          <p className="text-sm text-muted">Read the <Link href="/refunds" className="underline">refund policy</Link>, then ask a person to review a charge. We answer within 3 business days.</p>
+          <h2 id="refund-h" className="font-display text-xl font-semibold">{lang === "es" ? "Reembolsos" : "Refunds"}</h2>
+          <p className="text-sm text-muted">{lang === "es" ? <>Lee la <Link href="/refunds" className="underline">política de reembolsos</Link> y luego pide a una persona que revise un cargo. Respondemos en 3 días hábiles.</> : <>Read the <Link href="/refunds" className="underline">refund policy</Link>, then ask a person to review a charge. We answer within 3 business days.</>}</p>
           <RefundRequest />
         </section>
 
