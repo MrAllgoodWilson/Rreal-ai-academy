@@ -36,7 +36,7 @@ export default function PricingPage() {
           {FEATURES.map((f) => <li key={f} className="flex gap-3"><Check className="mt-0.5 h-5 w-5 shrink-0 text-lime" aria-hidden="true" />{f}</li>)}
         </ul>
         <Link href={href} className="btn-primary mt-10 text-lg">{subscribed ? t("pay.active") : t("pay.cta")}</Link>
-        <p className="mt-4 text-sm text-muted">Billed monthly in USD via Stripe. Cancel anytime in Settings → Plan & billing.</p>
+        <p className="mt-4 text-sm text-muted">Billed monthly in USD; payments are processed securely by Stripe, and you do not need a Stripe account. Cancel anytime in Settings → Plan & billing. See the <Link href="/refunds" className="underline">refund policy</Link>.</p>
       </motion.div>
       <p className="mt-6 text-center text-sm text-muted">Optional power-ups: build your own custom course for $9.99, and AI video credits from $4.99 (1 free render every month). Fair-use limits keep membership at $1 forever.</p>
     </div>

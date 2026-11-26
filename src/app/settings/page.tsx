@@ -9,6 +9,8 @@ import { VoicePicker } from "@/components/VoicePicker";
 import { AiAccounts } from "@/components/AiAccounts";
 import { NudgePrefs } from "@/components/NudgePrefs";
 import { DeleteAccount } from "@/components/DeleteAccount";
+import { RefundRequest } from "@/components/RefundRequest";
+import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
 import { FormAlert } from "@/components/AuthCard";
 import { useAcademy } from "@/lib/store";
@@ -104,6 +106,12 @@ function Settings() {
             <button type="button" className="btn-ghost" onClick={() => router.push("/pricing")}>Change plan</button>
             {subscription.status !== "none" && <button type="button" className="btn-ghost" onClick={billing}>Manage billing / cancel</button>}
           </div>
+        </section>
+
+        <section className="card space-y-4" aria-labelledby="refund-h">
+          <h2 id="refund-h" className="font-display text-xl font-semibold">{lang === "es" ? "Reembolsos" : "Refunds"}</h2>
+          <p className="text-sm text-muted">{lang === "es" ? <>Lee la <Link href="/refunds" className="underline">política de reembolsos</Link> y luego pide a una persona que revise un cargo. Respondemos en 3 días hábiles.</> : <>Read the <Link href="/refunds" className="underline">refund policy</Link>, then ask a person to review a charge. We answer within 3 business days.</>}</p>
+          <RefundRequest />
         </section>
 
         <section className="card space-y-4" aria-labelledby="data-h">
